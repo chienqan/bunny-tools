@@ -70,7 +70,7 @@ describe('examples parse', () => {
     for (const cmd of registry.commands) {
       for (const ex of cmd.examples ?? []) {
         if (!ex.command.startsWith(`${registry.binary} `) && ex.command !== registry.binary) {
-          // Allow bootstrap snippets like `claude mcp add bunny-tools npx -y bunny-tools mcp`.
+          // Allow bootstrap snippets like `claude mcp add bunny-tools -- npx -y bunny-tools mcp`.
           if (!ex.command.includes(`${registry.binary}`)) {
             failures.push(`[${cmd.name}] example does not reference binary: "${ex.command}"`);
           }

@@ -859,7 +859,7 @@ export const registry: Registry = {
       ],
       examples: [
         {
-          command: 'claude mcp add bunny-tools npx -y bunny-tools mcp',
+          command: 'claude mcp add bunny-tools -- npx -y bunny-tools mcp',
           description: 'Install for Claude Code.',
         },
       ],

@@ -27,11 +27,13 @@ npm install -g bunny-tools
 
 ### As an MCP server (recommended for AI workflows)
 
-For Claude Code:
+For Claude Code (the `--` keeps `claude` from reading `-y` as its own option):
 
 ```bash
-claude mcp add bunny-tools npx -y bunny-tools mcp
+claude mcp add bunny-tools -- npx -y bunny-tools mcp
 ```
+
+Or let the CLI do it: `bunny install mcp` (add `--scope project` for the current project only).
 
 For Claude Desktop, add to `claude_desktop_config.json`:
 
