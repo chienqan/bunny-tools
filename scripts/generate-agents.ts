@@ -92,7 +92,7 @@ function defaultHandcurated(): string {
     '`bunny mcp` boots an MCP stdio server whose tools mirror the CLI (`bunny.storage_ls`, `bunny.cdn_hostname_add`, `bunny.dns_record_add`, ...) plus `bunny.run` as an escape hatch for any CLI invocation. Install for Claude Code with:',
     '',
     '```bash',
-    'claude mcp add bunny-tools npx -y bunny-tools mcp',
+    'claude mcp add bunny-tools -- npx -y bunny-tools mcp',
     '```',
   ].join('\n');
 }
