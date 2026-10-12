@@ -282,13 +282,15 @@ If you'd rather not give CI the account key, set `BUNNY_STORAGE_PASSWORD_<ZONE>`
 
 ## MCP server (AI integration)
 
-The server exposes 21 tools that mirror the CLI and accept names instead of ids:
+The server exposes 23 tools that mirror the CLI and accept names instead of ids:
 
 - **Deploy and purge:** `bunny.deploy`, `bunny.purge`
-- **Storage:** `bunny.storage_ls`, `bunny.storage_upload`, `bunny.storage_rm`, `bunny.storage_zone_list`, `bunny.storage_zone_create`, `bunny.storage_zone_delete`
+- **Storage:** `bunny.storage_ls`, `bunny.storage_upload`, `bunny.storage_download`, `bunny.storage_rm`, `bunny.storage_zone_list`, `bunny.storage_zone_create`, `bunny.storage_zone_delete`
 - **CDN:** `bunny.cdn_list`, `bunny.cdn_create`, `bunny.cdn_delete`, `bunny.cdn_hostname_list`, `bunny.cdn_hostname_add`, `bunny.cdn_hostname_remove`, `bunny.domain_connect`
 - **DNS:** `bunny.dns_list`, `bunny.dns_record_add`, `bunny.dns_record_delete`
-- **Meta:** `bunny.init`, `bunny.manifest`, and `bunny.run` (run any CLI command)
+- **Meta:** `bunny.whoami`, `bunny.init`, `bunny.manifest`, and `bunny.run` (run any CLI command)
+
+List tools return compact objects by default (DNS record types as names, pull zones as id/name/origin/hostnames); pass `full: true` for Bunny's raw objects.
 
 **Resources:** `bunny://manifest` (command registry), `bunny://agents` ([`AGENTS.md`](./AGENTS.md)), `bunny://config/current` (masked credentials view).
 

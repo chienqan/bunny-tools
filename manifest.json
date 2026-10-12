@@ -688,7 +688,10 @@
           "description": "Save as ./logo.png."
         }
       ],
-      "mcp": null
+      "mcp": {
+        "tool": "bunny.storage_download",
+        "description": null
+      }
     },
     {
       "name": "storage rm",
@@ -2344,7 +2347,10 @@
           "description": "Inspect a specific profile without switching."
         }
       ],
-      "mcp": null
+      "mcp": {
+        "tool": "bunny.whoami",
+        "description": null
+      }
     },
     {
       "name": "docs",
