@@ -4,6 +4,21 @@ All notable changes to bunny-tools are documented here. This changelog follows [
 
 ---
 
+## [0.2.1] - 2026-10-12
+
+### Changed
+- **MCP list tools return compact output by default.** `bunny.dns_list` without `zone` returns `{ Id, Domain, records }`. With `zone` it returns records as `{ Id, type, name, value, ttl, ... }`, with type names (A, CNAME, PULLZONE...) and zero-valued fields dropped. `bunny.cdn_list` returns `{ Id, Name, OriginUrl, Enabled, hostnames[{ host, ssl, forceSsl }] }`. Pass `full: true` for Bunny's raw objects. On a 6-domain test account this cut `dns_list` from about 20 KB to 0.3 KB and `cdn_list` from about 47 KB to 1.7 KB.
+
+### Added
+- MCP tools `bunny.whoami` (credential scopes and reachable zone counts) and `bunny.storage_download`. The account-summary logic is shared with `bunny whoami`.
+
+### Fixed
+- The documented Claude Code install command was missing the `--` separator (`claude mcp add bunny-tools -- npx -y bunny-tools mcp`). Without it, `claude` rejects `-y` as an unknown option. `bunny install mcp` was already correct.
+- The release workflow pins npm 11 for trusted publishing on Node 20 (npm 12 dropped Node 20).
+- The e2e suite passes `--yes` to `cdn rule delete` and `cdn hostname remove`.
+
+---
+
 ## [0.2.0] - 2026-10-12
 
 CLI redesign: commands you can guess, one credential, agent-friendly output. **Breaking:** old command names are removed (no aliases); see the migration table.
