@@ -39,7 +39,7 @@ describe.skipIf(!E2E_ENABLED)('e2e: domain connect (idempotency)', () => {
   afterAll(async () => {
     // Best-effort: detach hostname before the pull-zone is deleted by
     // cleanup-registry. Hostname removal is non-fatal if it was never linked.
-    await bunnyCli(['cdn', 'hostname', 'remove', String(pullZoneId), fakeHost]);
+    await bunnyCli(['cdn', 'hostname', 'remove', String(pullZoneId), fakeHost, '--yes']);
     await cleanupAll();
   });
 
