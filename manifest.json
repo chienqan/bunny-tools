@@ -1,7 +1,7 @@
 {
   "cliName": "bunny-tools",
   "binary": "bunny",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "description": "Bunny.net CLI - storage deploy, CDN purge, full resource management.",
   "commands": [
     {
@@ -114,7 +114,7 @@
         {
           "name": "storage-password",
           "short": null,
-          "description": "Storage zone password (stored in keychain).",
+          "description": "Explicit storage zone password (optional; fetched with the API key otherwise).",
           "hasValue": true,
           "valueHint": null,
           "defaultValue": null
@@ -174,7 +174,7 @@
           "description": "Interactive wizard with feature multi-select."
         },
         {
-          "command": "bunny init --non-interactive --features=storage --api-key=$KEY --storage-zone=my-app --storage-password=$PW --pull-zone=12345",
+          "command": "bunny init --non-interactive --features=storage --api-key=$KEY --storage-zone=my-app --pull-zone=12345",
           "description": "CI-friendly Storage+CDN setup."
         },
         {
@@ -189,7 +189,7 @@
     },
     {
       "name": "configure",
-      "summary": "Interactive credential walkthrough for a profile (API key + optional storage/stream).",
+      "summary": "Store your Bunny API key for a profile (zone passwords are then fetched automatically).",
       "description": null,
       "status": "active",
       "phase": 2,
@@ -222,7 +222,7 @@
         {
           "name": "storage-zone",
           "short": null,
-          "description": "Default storage zone for this profile.",
+          "description": "Pin an explicit password for this zone (with --storage-password). Rarely needed.",
           "hasValue": true,
           "valueHint": null,
           "defaultValue": null
@@ -230,7 +230,7 @@
         {
           "name": "storage-password",
           "short": null,
-          "description": "Storage zone password.",
+          "description": "Explicit storage zone password (optional; fetched automatically otherwise).",
           "hasValue": true,
           "valueHint": null,
           "defaultValue": null
@@ -270,7 +270,7 @@
           "description": "Set up the \"work\" profile."
         },
         {
-          "command": "bunny configure --non-interactive --profile=ci --api-key=$KEY --storage-zone=my-app --storage-password=$PW",
+          "command": "bunny configure --non-interactive --profile=ci --api-key=$KEY",
           "description": "CI form."
         }
       ],
@@ -471,27 +471,60 @@
     },
     {
       "name": "purge",
-      "summary": "Purge CDN cache by URL or pullzone:<id>.",
-      "description": null,
+      "summary": "Purge CDN cache: URLs, a whole pull zone, or one Cache-Tag.",
+      "description": "With URLs, purges each URL. With --pull-zone, purges the whole zone (or only --tag). With no arguments, purges every pull zone listed in bunny.json.",
       "status": "active",
       "phase": 2,
       "args": [
         {
-          "name": "target",
-          "description": "<url> | pullzone:<id>",
-          "required": true,
-          "variadic": false
+          "name": "urls",
+          "description": "Full URLs to purge.",
+          "required": false,
+          "variadic": true
         }
       ],
-      "flags": [],
-      "examples": [
+      "flags": [
         {
-          "command": "bunny purge https://cdn.example.com/asset.js",
-          "description": "Purge a specific URL."
+          "name": "pull-zone",
+          "short": null,
+          "description": "Pull zone name or id to purge.",
+          "hasValue": true,
+          "valueHint": null,
+          "defaultValue": null
         },
         {
-          "command": "bunny purge pullzone:12345",
-          "description": "Full pull-zone purge."
+          "name": "tag",
+          "short": null,
+          "description": "Purge only this Cache-Tag (needs --pull-zone).",
+          "hasValue": true,
+          "valueHint": null,
+          "defaultValue": null
+        },
+        {
+          "name": "json",
+          "short": null,
+          "description": "Emit JSON result.",
+          "hasValue": false,
+          "valueHint": null,
+          "defaultValue": null
+        }
+      ],
+      "examples": [
+        {
+          "command": "bunny purge https://cdn.example.com/app.js",
+          "description": "Purge one URL."
+        },
+        {
+          "command": "bunny purge --pull-zone my-site",
+          "description": "Purge a whole pull zone."
+        },
+        {
+          "command": "bunny purge --pull-zone my-site --tag app",
+          "description": "Purge one Cache-Tag."
+        },
+        {
+          "command": "bunny purge",
+          "description": "Purge the pull zones configured in bunny.json."
         }
       ],
       "mcp": {
@@ -500,123 +533,24 @@
       }
     },
     {
-      "name": "storage upload",
-      "summary": "Upload a file to a storage zone.",
-      "description": null,
+      "name": "storage ls",
+      "summary": "List storage zones (no argument) or files at <zone>/<path>.",
+      "description": "With no argument, lists every storage zone on the account. With `<zone>` or `<zone>/<path>`, lists that directory. Only the account API key is needed: zone passwords are fetched automatically.",
       "status": "active",
       "phase": 3,
       "args": [
         {
-          "name": "local",
-          "description": "Local file path.",
-          "required": true,
-          "variadic": false
-        },
-        {
-          "name": "remote",
-          "description": "Remote path within the zone.",
-          "required": true,
-          "variadic": false
-        }
-      ],
-      "flags": [
-        {
-          "name": "zone",
-          "short": null,
-          "description": "Storage zone name.",
-          "hasValue": true,
-          "valueHint": null,
-          "defaultValue": null
-        },
-        {
-          "name": "region",
-          "short": null,
-          "description": "Override region (e.g. ny, la).",
-          "hasValue": true,
-          "valueHint": null,
-          "defaultValue": null
-        }
-      ],
-      "examples": [
-        {
-          "command": "bunny storage upload ./build/index.html /index.html",
-          "description": "Single file at root."
-        },
-        {
-          "command": "bunny storage upload ./logo.png /assets/logo.png --zone=my-app",
-          "description": "Override zone."
-        }
-      ],
-      "mcp": null
-    },
-    {
-      "name": "storage download",
-      "summary": "Download a file from a storage zone.",
-      "description": null,
-      "status": "active",
-      "phase": 3,
-      "args": [
-        {
-          "name": "remote",
-          "description": "Remote path within the zone.",
-          "required": true,
-          "variadic": false
-        },
-        {
-          "name": "local",
-          "description": "Local destination path.",
-          "required": true,
-          "variadic": false
-        }
-      ],
-      "flags": [
-        {
-          "name": "zone",
-          "short": null,
-          "description": "Storage zone name.",
-          "hasValue": true,
-          "valueHint": null,
-          "defaultValue": null
-        },
-        {
-          "name": "region",
-          "short": null,
-          "description": "Override region.",
-          "hasValue": true,
-          "valueHint": null,
-          "defaultValue": null
-        }
-      ],
-      "examples": [],
-      "mcp": null
-    },
-    {
-      "name": "storage list",
-      "summary": "List a storage-zone path.",
-      "description": null,
-      "status": "active",
-      "phase": 3,
-      "args": [
-        {
-          "name": "path",
-          "description": "Path within the zone (default /).",
+          "name": "target",
+          "description": "<zone> or <zone>/<path> (omit to list zones).",
           "required": false,
           "variadic": false
         }
       ],
       "flags": [
         {
-          "name": "zone",
-          "short": null,
-          "description": "Storage zone name.",
-          "hasValue": true,
-          "valueHint": null,
-          "defaultValue": null
-        },
-        {
           "name": "recursive",
-          "short": null,
-          "description": "List recursively.",
+          "short": "r",
+          "description": "List every file below the path.",
           "hasValue": false,
           "valueHint": null,
           "defaultValue": null
@@ -632,7 +566,7 @@
         {
           "name": "region",
           "short": null,
-          "description": "Override region.",
+          "description": "Skip region lookup (ny|la|sg|syd|uk|se|br|jh).",
           "hasValue": true,
           "valueHint": null,
           "defaultValue": null
@@ -640,54 +574,48 @@
       ],
       "examples": [
         {
-          "command": "bunny storage list",
+          "command": "bunny storage ls",
+          "description": "List all storage zones."
+        },
+        {
+          "command": "bunny storage ls my-zone",
           "description": "List the zone root."
         },
         {
-          "command": "bunny storage list /assets --recursive",
-          "description": "Walk a subtree."
+          "command": "bunny storage ls my-zone/assets -r --json",
+          "description": "Recursive listing as JSON."
         }
       ],
       "mcp": {
-        "tool": "bunny.storage_list",
+        "tool": "bunny.storage_ls",
         "description": null
       }
     },
     {
-      "name": "storage delete",
-      "summary": "Delete a file or path from a storage zone.",
+      "name": "storage upload",
+      "summary": "Upload a local file to <zone>/<path>.",
       "description": null,
       "status": "active",
       "phase": 3,
       "args": [
         {
-          "name": "path",
-          "description": "Remote path.",
+          "name": "local",
+          "description": "Local file path.",
+          "required": true,
+          "variadic": false
+        },
+        {
+          "name": "target",
+          "description": "<zone>/<path>. A trailing slash keeps the local file name.",
           "required": true,
           "variadic": false
         }
       ],
       "flags": [
         {
-          "name": "zone",
+          "name": "json",
           "short": null,
-          "description": "Storage zone name.",
-          "hasValue": true,
-          "valueHint": null,
-          "defaultValue": null
-        },
-        {
-          "name": "recursive",
-          "short": null,
-          "description": "Delete recursively.",
-          "hasValue": false,
-          "valueHint": null,
-          "defaultValue": null
-        },
-        {
-          "name": "yes",
-          "short": null,
-          "description": "Skip confirmation.",
+          "description": "Emit JSON result.",
           "hasValue": false,
           "valueHint": null,
           "defaultValue": null
@@ -695,18 +623,136 @@
         {
           "name": "region",
           "short": null,
-          "description": "Override region.",
+          "description": "Skip region lookup.",
           "hasValue": true,
           "valueHint": null,
           "defaultValue": null
         }
       ],
-      "examples": [],
+      "examples": [
+        {
+          "command": "bunny storage upload ./logo.png my-zone/img/logo.png",
+          "description": "Upload to an explicit path."
+        },
+        {
+          "command": "bunny storage upload ./logo.png my-zone/img/",
+          "description": "Upload into a directory, keeping the name."
+        }
+      ],
       "mcp": null
     },
     {
+      "name": "storage download",
+      "summary": "Download <zone>/<path> to a local file.",
+      "description": null,
+      "status": "active",
+      "phase": 3,
+      "args": [
+        {
+          "name": "target",
+          "description": "<zone>/<path> of the file.",
+          "required": true,
+          "variadic": false
+        },
+        {
+          "name": "local",
+          "description": "Local destination (default: remote file name in cwd).",
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "json",
+          "short": null,
+          "description": "Emit JSON result.",
+          "hasValue": false,
+          "valueHint": null,
+          "defaultValue": null
+        },
+        {
+          "name": "region",
+          "short": null,
+          "description": "Skip region lookup.",
+          "hasValue": true,
+          "valueHint": null,
+          "defaultValue": null
+        }
+      ],
+      "examples": [
+        {
+          "command": "bunny storage download my-zone/img/logo.png",
+          "description": "Save as ./logo.png."
+        }
+      ],
+      "mcp": null
+    },
+    {
+      "name": "storage rm",
+      "summary": "Delete a file (or a directory with -r) at <zone>/<path>.",
+      "description": null,
+      "status": "active",
+      "phase": 3,
+      "args": [
+        {
+          "name": "target",
+          "description": "<zone>/<path>. Zone roots are refused.",
+          "required": true,
+          "variadic": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "recursive",
+          "short": "r",
+          "description": "Delete every file below the path.",
+          "hasValue": false,
+          "valueHint": null,
+          "defaultValue": null
+        },
+        {
+          "name": "yes",
+          "short": "y",
+          "description": "Skip confirmation (required in non-interactive shells).",
+          "hasValue": false,
+          "valueHint": null,
+          "defaultValue": null
+        },
+        {
+          "name": "json",
+          "short": null,
+          "description": "Emit JSON result.",
+          "hasValue": false,
+          "valueHint": null,
+          "defaultValue": null
+        },
+        {
+          "name": "region",
+          "short": null,
+          "description": "Skip region lookup.",
+          "hasValue": true,
+          "valueHint": null,
+          "defaultValue": null
+        }
+      ],
+      "examples": [
+        {
+          "command": "bunny storage rm my-zone/old.txt --yes",
+          "description": "Delete one file."
+        },
+        {
+          "command": "bunny storage rm my-zone/tmp/ -r --yes",
+          "description": "Delete a directory tree."
+        }
+      ],
+      "mcp": {
+        "tool": "bunny.storage_rm",
+        "description": null
+      }
+    },
+    {
       "name": "storage sync",
-      "summary": "Sync a local directory to a storage zone (upload-only, no purge).",
+      "summary": "Upload a local directory to <zone>[/<path>] (upload-only, no CDN purge).",
       "description": null,
       "status": "active",
       "phase": 3,
@@ -718,33 +764,33 @@
           "variadic": false
         },
         {
-          "name": "remote",
-          "description": "Remote root path (default /).",
-          "required": false,
+          "name": "target",
+          "description": "<zone> or <zone>/<path>.",
+          "required": true,
           "variadic": false
         }
       ],
       "flags": [
         {
-          "name": "zone",
-          "short": null,
-          "description": "Storage zone name.",
-          "hasValue": true,
-          "valueHint": null,
-          "defaultValue": null
-        },
-        {
           "name": "concurrency",
           "short": null,
-          "description": "Parallel pool size.",
+          "description": "Parallel uploads.",
           "hasValue": true,
           "valueHint": null,
           "defaultValue": "8"
         },
         {
+          "name": "json",
+          "short": null,
+          "description": "Emit JSON result.",
+          "hasValue": false,
+          "valueHint": null,
+          "defaultValue": null
+        },
+        {
           "name": "region",
           "short": null,
-          "description": "Override region.",
+          "description": "Skip region lookup.",
           "hasValue": true,
           "valueHint": null,
           "defaultValue": null
@@ -752,19 +798,15 @@
       ],
       "examples": [
         {
-          "command": "bunny storage sync ./public",
-          "description": "Mirror local public/ to zone root."
-        },
-        {
-          "command": "bunny storage sync ./build /v2 --concurrency=16",
-          "description": "Sync into a versioned prefix."
+          "command": "bunny storage sync ./public my-zone/",
+          "description": "Mirror ./public into the zone root."
         }
       ],
       "mcp": null
     },
     {
-      "name": "storagezone list",
-      "summary": "List storage zones.",
+      "name": "storage zone list",
+      "summary": "List storage zones with id, region, size and replication.",
       "description": null,
       "status": "active",
       "phase": 3,
@@ -781,33 +823,30 @@
       ],
       "examples": [],
       "mcp": {
-        "tool": "bunny.zones_list",
+        "tool": "bunny.storage_zone_list",
         "description": null
       }
     },
     {
-      "name": "storagezone get",
-      "summary": "Get a storage zone by id or name.",
+      "name": "storage zone get",
+      "summary": "Show one storage zone as JSON (passwords stripped).",
       "description": null,
       "status": "active",
       "phase": 3,
       "args": [
         {
-          "name": "idOrName",
-          "description": "Numeric id or zone name.",
+          "name": "zone",
+          "description": "Zone name or id.",
           "required": true,
           "variadic": false
         }
       ],
       "flags": [],
       "examples": [],
-      "mcp": {
-        "tool": "bunny.zone_get",
-        "description": null
-      }
+      "mcp": null
     },
     {
-      "name": "storagezone create",
+      "name": "storage zone create",
       "summary": "Create a storage zone.",
       "description": null,
       "status": "active",
@@ -815,7 +854,7 @@
       "args": [
         {
           "name": "name",
-          "description": "Zone name.",
+          "description": "Zone name (lowercase letters, digits, hyphens).",
           "required": true,
           "variadic": false
         }
@@ -840,37 +879,41 @@
         {
           "name": "tier",
           "short": null,
-          "description": "Standard | Edge.",
+          "description": "standard | edge.",
           "hasValue": true,
+          "valueHint": null,
+          "defaultValue": null
+        },
+        {
+          "name": "json",
+          "short": null,
+          "description": "Emit JSON result.",
+          "hasValue": false,
           "valueHint": null,
           "defaultValue": null
         }
       ],
       "examples": [
         {
-          "command": "bunny storagezone create my-app --region=ny",
-          "description": "Single-region zone."
-        },
-        {
-          "command": "bunny storagezone create my-app --region=ny --replicate=la,sg",
-          "description": "Replicated to LA + SG."
+          "command": "bunny storage zone create my-zone --region sg",
+          "description": "New zone in Singapore."
         }
       ],
       "mcp": {
-        "tool": "bunny.zone_create",
+        "tool": "bunny.storage_zone_create",
         "description": null
       }
     },
     {
-      "name": "storagezone update",
-      "summary": "Update a storage zone (raw JSON body).",
+      "name": "storage zone update",
+      "summary": "Update a storage zone with a raw JSON body.",
       "description": null,
       "status": "active",
       "phase": 3,
       "args": [
         {
-          "name": "id",
-          "description": "Storage zone id.",
+          "name": "zone",
+          "description": "Zone name or id.",
           "required": true,
           "variadic": false
         }
@@ -879,8 +922,16 @@
         {
           "name": "body",
           "short": null,
-          "description": "JSON body to POST.",
+          "description": "JSON body sent to Bunny.",
           "hasValue": true,
+          "valueHint": null,
+          "defaultValue": null
+        },
+        {
+          "name": "json",
+          "short": null,
+          "description": "Emit JSON result.",
+          "hasValue": false,
           "valueHint": null,
           "defaultValue": null
         }
@@ -889,15 +940,15 @@
       "mcp": null
     },
     {
-      "name": "storagezone delete",
-      "summary": "Delete a storage zone.",
+      "name": "storage zone delete",
+      "summary": "Delete a storage zone and all its files.",
       "description": null,
       "status": "active",
       "phase": 3,
       "args": [
         {
-          "name": "id",
-          "description": "Storage zone id.",
+          "name": "zone",
+          "description": "Zone name or id.",
           "required": true,
           "variadic": false
         }
@@ -905,8 +956,16 @@
       "flags": [
         {
           "name": "yes",
-          "short": null,
+          "short": "y",
           "description": "Skip confirmation.",
+          "hasValue": false,
+          "valueHint": null,
+          "defaultValue": null
+        },
+        {
+          "name": "json",
+          "short": null,
+          "description": "Emit JSON result.",
           "hasValue": false,
           "valueHint": null,
           "defaultValue": null
@@ -914,12 +973,12 @@
       ],
       "examples": [],
       "mcp": {
-        "tool": "bunny.zone_delete",
+        "tool": "bunny.storage_zone_delete",
         "description": null
       }
     },
     {
-      "name": "pullzone list",
+      "name": "cdn list",
       "summary": "List pull zones.",
       "description": null,
       "status": "active",
@@ -939,15 +998,15 @@
       "mcp": null
     },
     {
-      "name": "pullzone get",
-      "summary": "Get a pull zone.",
+      "name": "cdn get",
+      "summary": "Show one pull zone as JSON.",
       "description": null,
       "status": "active",
       "phase": 3,
       "args": [
         {
-          "name": "id",
-          "description": "Pull zone id.",
+          "name": "pullZone",
+          "description": "Pull zone name or id.",
           "required": true,
           "variadic": false
         }
@@ -957,8 +1016,8 @@
       "mcp": null
     },
     {
-      "name": "pullzone create",
-      "summary": "Create a pull zone.",
+      "name": "cdn create",
+      "summary": "Create a pull zone in front of an origin URL.",
       "description": null,
       "status": "active",
       "phase": 3,
@@ -974,34 +1033,38 @@
         {
           "name": "origin",
           "short": null,
-          "description": "Origin URL.",
+          "description": "Origin URL (required).",
           "hasValue": true,
+          "valueHint": null,
+          "defaultValue": null
+        },
+        {
+          "name": "json",
+          "short": null,
+          "description": "Emit JSON result.",
+          "hasValue": false,
           "valueHint": null,
           "defaultValue": null
         }
       ],
       "examples": [
         {
-          "command": "bunny pullzone create my-cdn --origin=https://my-app.b-cdn.net",
-          "description": "CDN in front of a storage zone."
-        },
-        {
-          "command": "bunny pullzone create api-cache --origin=https://api.example.com",
-          "description": "CDN in front of an HTTP origin."
+          "command": "bunny cdn create my-site --origin https://origin.example.com",
+          "description": "New pull zone."
         }
       ],
       "mcp": null
     },
     {
-      "name": "pullzone update",
-      "summary": "Update a pull zone (raw JSON body).",
+      "name": "cdn update",
+      "summary": "Update a pull zone with a raw JSON body.",
       "description": null,
       "status": "active",
       "phase": 3,
       "args": [
         {
-          "name": "id",
-          "description": "Pull zone id.",
+          "name": "pullZone",
+          "description": "Pull zone name or id.",
           "required": true,
           "variadic": false
         }
@@ -1010,34 +1073,15 @@
         {
           "name": "body",
           "short": null,
-          "description": "JSON body to POST.",
+          "description": "JSON body sent to Bunny.",
           "hasValue": true,
           "valueHint": null,
           "defaultValue": null
-        }
-      ],
-      "examples": [],
-      "mcp": null
-    },
-    {
-      "name": "pullzone delete",
-      "summary": "Delete a pull zone.",
-      "description": null,
-      "status": "active",
-      "phase": 3,
-      "args": [
+        },
         {
-          "name": "id",
-          "description": "Pull zone id.",
-          "required": true,
-          "variadic": false
-        }
-      ],
-      "flags": [
-        {
-          "name": "yes",
+          "name": "json",
           "short": null,
-          "description": "Skip confirmation.",
+          "description": "Emit JSON result.",
           "hasValue": false,
           "valueHint": null,
           "defaultValue": null
@@ -1047,15 +1091,50 @@
       "mcp": null
     },
     {
-      "name": "pullzone edgerule list",
+      "name": "cdn delete",
+      "summary": "Delete a pull zone.",
+      "description": null,
+      "status": "active",
+      "phase": 3,
+      "args": [
+        {
+          "name": "pullZone",
+          "description": "Pull zone name or id.",
+          "required": true,
+          "variadic": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "yes",
+          "short": "y",
+          "description": "Skip confirmation.",
+          "hasValue": false,
+          "valueHint": null,
+          "defaultValue": null
+        },
+        {
+          "name": "json",
+          "short": null,
+          "description": "Emit JSON result.",
+          "hasValue": false,
+          "valueHint": null,
+          "defaultValue": null
+        }
+      ],
+      "examples": [],
+      "mcp": null
+    },
+    {
+      "name": "cdn rule list",
       "summary": "List edge rules on a pull zone.",
       "description": null,
       "status": "active",
       "phase": 3,
       "args": [
         {
-          "name": "pullZoneId",
-          "description": "Pull zone id.",
+          "name": "pullZone",
+          "description": "Pull zone name or id.",
           "required": true,
           "variadic": false
         }
@@ -1074,15 +1153,15 @@
       "mcp": null
     },
     {
-      "name": "pullzone edgerule add",
-      "summary": "Add an edge rule to a pull zone (raw JSON rule).",
+      "name": "cdn rule add",
+      "summary": "Add or update an edge rule (raw JSON rule; include Guid to update).",
       "description": null,
       "status": "active",
       "phase": 3,
       "args": [
         {
-          "name": "pullZoneId",
-          "description": "Pull zone id.",
+          "name": "pullZone",
+          "description": "Pull zone name or id.",
           "required": true,
           "variadic": false
         }
@@ -1095,50 +1174,67 @@
           "hasValue": true,
           "valueHint": null,
           "defaultValue": null
+        },
+        {
+          "name": "json",
+          "short": null,
+          "description": "Emit JSON result (rules after the change).",
+          "hasValue": false,
+          "valueHint": null,
+          "defaultValue": null
         }
       ],
       "examples": [
         {
-          "command": "bunny pullzone edgerule add 555 --rule='{\"ActionType\":3,\"TriggerMatchingType\":0,\"Triggers\":[{\"Type\":1,\"PatternMatches\":[\"*.mjs\"]}],\"ActionParameter1\":\"text/javascript\",\"Description\":\"Force .mjs MIME\"}'",
-          "description": "Override Content-Type for .mjs."
+          "command": "bunny cdn rule add my-site --rule '{\"ActionType\":1,\"Triggers\":[{\"Type\":0,\"PatternMatches\":[\"*/old/*\"]}],\"ActionParameter1\":\"https://example.com/new\"}'",
+          "description": "Redirect /old/* to a new URL."
         }
       ],
       "mcp": null
     },
     {
-      "name": "pullzone edgerule delete",
+      "name": "cdn rule delete",
       "summary": "Delete an edge rule by Guid.",
       "description": null,
       "status": "active",
       "phase": 3,
       "args": [
         {
-          "name": "pullZoneId",
-          "description": "Pull zone id.",
+          "name": "pullZone",
+          "description": "Pull zone name or id.",
           "required": true,
           "variadic": false
         },
         {
-          "name": "ruleGuid",
-          "description": "Edge rule Guid.",
+          "name": "guid",
+          "description": "Edge rule Guid (see `bunny cdn rule list`).",
           "required": true,
           "variadic": false
         }
       ],
-      "flags": [],
+      "flags": [
+        {
+          "name": "json",
+          "short": null,
+          "description": "Emit JSON result.",
+          "hasValue": false,
+          "valueHint": null,
+          "defaultValue": null
+        }
+      ],
       "examples": [],
       "mcp": null
     },
     {
-      "name": "pullzone hostname list",
+      "name": "cdn hostname list",
       "summary": "List custom hostnames linked to a pull zone.",
       "description": null,
       "status": "active",
       "phase": 3,
       "args": [
         {
-          "name": "pullZoneId",
-          "description": "Pull zone id.",
+          "name": "pullZone",
+          "description": "Pull zone name or id.",
           "required": true,
           "variadic": false
         }
@@ -1154,18 +1250,21 @@
         }
       ],
       "examples": [],
-      "mcp": null
+      "mcp": {
+        "tool": "bunny.cdn_hostname_list",
+        "description": null
+      }
     },
     {
-      "name": "pullzone hostname add",
-      "summary": "Link hostname + provision Let's Encrypt cert + ForceSSL. Idempotent.",
+      "name": "cdn hostname add",
+      "summary": "Link a hostname, provision a Let's Encrypt cert and enable ForceSSL. Idempotent.",
       "description": null,
       "status": "active",
       "phase": 3,
       "args": [
         {
-          "name": "pullZoneId",
-          "description": "Pull zone id.",
+          "name": "pullZone",
+          "description": "Pull zone name or id.",
           "required": true,
           "variadic": false
         },
@@ -1180,7 +1279,7 @@
         {
           "name": "no-force-ssl",
           "short": null,
-          "description": "Provision cert but disable HTTP→HTTPS redirect (state assertion: re-run flips OFF).",
+          "description": "Provision cert but disable HTTP→HTTPS redirect (re-run flips it off).",
           "hasValue": false,
           "valueHint": null,
           "defaultValue": null
@@ -1188,34 +1287,45 @@
         {
           "name": "timeout",
           "short": null,
-          "description": "Cert wait timeout in seconds (default 90).",
+          "description": "Cert wait timeout in seconds.",
           "hasValue": true,
           "valueHint": null,
           "defaultValue": "90"
+        },
+        {
+          "name": "json",
+          "short": null,
+          "description": "Emit JSON result.",
+          "hasValue": false,
+          "valueHint": null,
+          "defaultValue": null
         }
       ],
       "examples": [
         {
-          "command": "bunny pullzone hostname add 555 example.com",
-          "description": "Link + cert + ForceSSL on (default-secure)."
+          "command": "bunny cdn hostname add my-site cdn.example.com",
+          "description": "Link + cert + ForceSSL."
         },
         {
-          "command": "bunny pullzone hostname add 555 legacy.example.com --no-force-ssl",
-          "description": "Link + cert, but allow plain HTTP for legacy clients."
+          "command": "bunny cdn hostname add my-site cdn.example.com --no-force-ssl",
+          "description": "Cert without redirect."
         }
       ],
-      "mcp": null
+      "mcp": {
+        "tool": "bunny.cdn_hostname_add",
+        "description": null
+      }
     },
     {
-      "name": "pullzone hostname remove",
+      "name": "cdn hostname remove",
       "summary": "Unlink a custom hostname from a pull zone.",
       "description": null,
       "status": "active",
       "phase": 3,
       "args": [
         {
-          "name": "pullZoneId",
-          "description": "Pull zone id.",
+          "name": "pullZone",
+          "description": "Pull zone name or id.",
           "required": true,
           "variadic": false
         },
@@ -1226,20 +1336,29 @@
           "variadic": false
         }
       ],
-      "flags": [],
+      "flags": [
+        {
+          "name": "json",
+          "short": null,
+          "description": "Emit JSON result.",
+          "hasValue": false,
+          "valueHint": null,
+          "defaultValue": null
+        }
+      ],
       "examples": [],
       "mcp": null
     },
     {
       "name": "domain connect",
-      "summary": "Atomic: link hostname + cert + optional apex Type-7 DNS record. Idempotent.",
+      "summary": "One step: link hostname + cert + optional apex PULLZONE DNS record. Idempotent.",
       "description": null,
       "status": "active",
       "phase": 3,
       "args": [
         {
-          "name": "pullZoneId",
-          "description": "Pull zone id.",
+          "name": "pullZone",
+          "description": "Pull zone name or id.",
           "required": true,
           "variadic": false
         },
@@ -1254,7 +1373,7 @@
         {
           "name": "dns-zone",
           "short": null,
-          "description": "Also create the Type-7 PULLZONE DNS record in this DNS zone id.",
+          "description": "Also create the PULLZONE DNS record in this DNS zone (domain or id).",
           "hasValue": true,
           "valueHint": null,
           "defaultValue": null
@@ -1270,7 +1389,7 @@
         {
           "name": "no-wait",
           "short": null,
-          "description": "Skip cert provisioning poll (advanced; caller verifies separately).",
+          "description": "Skip waiting for the cert (caller verifies separately).",
           "hasValue": false,
           "valueHint": null,
           "defaultValue": null
@@ -1278,7 +1397,7 @@
         {
           "name": "timeout",
           "short": null,
-          "description": "Cert wait timeout in seconds (default 90).",
+          "description": "Cert wait timeout in seconds.",
           "hasValue": true,
           "valueHint": null,
           "defaultValue": "90"
@@ -1286,7 +1405,15 @@
         {
           "name": "no-force-ssl",
           "short": null,
-          "description": "Skip auto-enabling ForceSSL (HTTP→HTTPS redirect).",
+          "description": "Skip enabling ForceSSL (HTTP→HTTPS redirect).",
+          "hasValue": false,
+          "valueHint": null,
+          "defaultValue": null
+        },
+        {
+          "name": "json",
+          "short": null,
+          "description": "Emit JSON result.",
           "hasValue": false,
           "valueHint": null,
           "defaultValue": null
@@ -1294,15 +1421,14 @@
       ],
       "examples": [
         {
-          "command": "bunny domain connect 5789465 example.com",
-          "description": "Link hostname + provision cert. Add DNS record separately."
-        },
-        {
-          "command": "bunny domain connect 5789465 example.com --dns-zone=784669",
-          "description": "End-to-end: hostname + cert + apex Type-7 record."
+          "command": "bunny domain connect my-site example.com --dns-zone example.com",
+          "description": "Link, cert and apex DNS in one go."
         }
       ],
-      "mcp": null
+      "mcp": {
+        "tool": "bunny.domain_connect",
+        "description": null
+      }
     },
     {
       "name": "dns list",
@@ -1326,14 +1452,14 @@
     },
     {
       "name": "dns get",
-      "summary": "Get a DNS zone (with records) by id.",
+      "summary": "Show one DNS zone (with records) as JSON.",
       "description": null,
       "status": "active",
       "phase": 4,
       "args": [
         {
-          "name": "id",
-          "description": "DNS zone id.",
+          "name": "zone",
+          "description": "Domain or zone id.",
           "required": true,
           "variadic": false
         }
@@ -1356,25 +1482,29 @@
           "variadic": false
         }
       ],
-      "flags": [],
-      "examples": [
+      "flags": [
         {
-          "command": "bunny dns create example.com",
-          "description": "Provision a DNS zone - Bunny returns the assigned NS records."
+          "name": "json",
+          "short": null,
+          "description": "Emit JSON result.",
+          "hasValue": false,
+          "valueHint": null,
+          "defaultValue": null
         }
       ],
+      "examples": [],
       "mcp": null
     },
     {
       "name": "dns delete",
-      "summary": "Delete a DNS zone.",
+      "summary": "Delete a DNS zone and all its records.",
       "description": null,
       "status": "active",
       "phase": 4,
       "args": [
         {
-          "name": "id",
-          "description": "DNS zone id.",
+          "name": "zone",
+          "description": "Domain or zone id.",
           "required": true,
           "variadic": false
         }
@@ -1382,8 +1512,16 @@
       "flags": [
         {
           "name": "yes",
-          "short": null,
+          "short": "y",
           "description": "Skip confirmation.",
+          "hasValue": false,
+          "valueHint": null,
+          "defaultValue": null
+        },
+        {
+          "name": "json",
+          "short": null,
+          "description": "Emit JSON result.",
           "hasValue": false,
           "valueHint": null,
           "defaultValue": null
@@ -1394,14 +1532,14 @@
     },
     {
       "name": "dns record list",
-      "summary": "List DNS records for a zone.",
+      "summary": "List records in a DNS zone.",
       "description": null,
       "status": "active",
       "phase": 4,
       "args": [
         {
-          "name": "zoneId",
-          "description": "DNS zone id.",
+          "name": "zone",
+          "description": "Domain or zone id.",
           "required": true,
           "variadic": false
         }
@@ -1410,7 +1548,7 @@
         {
           "name": "type",
           "short": null,
-          "description": "Filter by record type.",
+          "description": "Filter by record type (A, CNAME, ...).",
           "hasValue": true,
           "valueHint": null,
           "defaultValue": null
@@ -1424,9 +1562,14 @@
           "defaultValue": null
         }
       ],
-      "examples": [],
+      "examples": [
+        {
+          "command": "bunny dns record list example.com --type A",
+          "description": "Only A records."
+        }
+      ],
       "mcp": {
-        "tool": "bunny.dns_records",
+        "tool": "bunny.dns_list",
         "description": null
       }
     },
@@ -1438,8 +1581,8 @@
       "phase": 4,
       "args": [
         {
-          "name": "zoneId",
-          "description": "DNS zone id.",
+          "name": "zone",
+          "description": "Domain or zone id.",
           "required": true,
           "variadic": false
         },
@@ -1451,7 +1594,7 @@
         },
         {
           "name": "name",
-          "description": "Record name.",
+          "description": "Record name (`@` or empty for apex).",
           "required": true,
           "variadic": false
         },
@@ -1514,7 +1657,7 @@
         {
           "name": "link-name",
           "short": null,
-          "description": "Linked resource id as string (PULLZONE/SCRIPT).",
+          "description": "Linked resource id (PULLZONE/SCRIPT).",
           "hasValue": true,
           "valueHint": null,
           "defaultValue": null
@@ -1522,51 +1665,55 @@
         {
           "name": "pull-zone",
           "short": null,
-          "description": "Convenience for PULLZONE: numeric pz id; auto-fills value + link-name.",
+          "description": "PULLZONE shortcut: pull zone name or id; fills value + link-name.",
           "hasValue": true,
+          "valueHint": null,
+          "defaultValue": null
+        },
+        {
+          "name": "json",
+          "short": null,
+          "description": "Emit JSON result.",
+          "hasValue": false,
           "valueHint": null,
           "defaultValue": null
         }
       ],
       "examples": [
         {
-          "command": "bunny dns record add 12345 A api 1.2.3.4",
-          "description": "A record for api.<zone>."
+          "command": "bunny dns record add example.com A www 1.2.3.4",
+          "description": "Standard A record."
         },
         {
-          "command": "bunny dns record add 12345 PULLZONE @ --pull-zone=5789465",
-          "description": "Apex Type-7 record pointing at a pull zone."
+          "command": "bunny dns record add example.com REDIRECT www https://example.com",
+          "description": "Redirect www to apex."
         },
         {
-          "command": "bunny dns record add 12345 TXT _acme-challenge \"verification-token\" --ttl=60",
-          "description": "ACME DNS-01 TXT."
-        },
-        {
-          "command": "bunny dns record add 12345 MX @ mail.example.com --priority=10",
-          "description": "MX with priority."
+          "command": "bunny dns record add example.com PULLZONE @ --pull-zone my-site",
+          "description": "Point the apex at a pull zone."
         }
       ],
       "mcp": {
-        "tool": "bunny.dns_record_set",
+        "tool": "bunny.dns_record_add",
         "description": null
       }
     },
     {
       "name": "dns record update",
-      "summary": "Update a DNS record (raw JSON body).",
+      "summary": "Update a DNS record with a raw JSON body.",
       "description": null,
       "status": "active",
       "phase": 4,
       "args": [
         {
-          "name": "zoneId",
-          "description": "DNS zone id.",
+          "name": "zone",
+          "description": "Domain or zone id.",
           "required": true,
           "variadic": false
         },
         {
           "name": "recordId",
-          "description": "Record id.",
+          "description": "Record id (see `bunny dns record list`).",
           "required": true,
           "variadic": false
         }
@@ -1575,8 +1722,16 @@
         {
           "name": "body",
           "short": null,
-          "description": "JSON body.",
+          "description": "JSON body sent to Bunny.",
           "hasValue": true,
+          "valueHint": null,
+          "defaultValue": null
+        },
+        {
+          "name": "json",
+          "short": null,
+          "description": "Emit JSON result.",
+          "hasValue": false,
           "valueHint": null,
           "defaultValue": null
         }
@@ -1592,14 +1747,14 @@
       "phase": 4,
       "args": [
         {
-          "name": "zoneId",
-          "description": "DNS zone id.",
+          "name": "zone",
+          "description": "Domain or zone id.",
           "required": true,
           "variadic": false
         },
         {
           "name": "recordId",
-          "description": "Record id.",
+          "description": "Record id (see `bunny dns record list`).",
           "required": true,
           "variadic": false
         }
@@ -1607,8 +1762,16 @@
       "flags": [
         {
           "name": "yes",
-          "short": null,
+          "short": "y",
           "description": "Skip confirmation.",
+          "hasValue": false,
+          "valueHint": null,
+          "defaultValue": null
+        },
+        {
+          "name": "json",
+          "short": null,
+          "description": "Emit JSON result.",
           "hasValue": false,
           "valueHint": null,
           "defaultValue": null
@@ -1662,14 +1825,17 @@
           "hasValue": true,
           "valueHint": null,
           "defaultValue": null
-        }
-      ],
-      "examples": [
+        },
         {
-          "command": "bunny stream library create marketing-videos",
-          "description": "Single-region library."
+          "name": "json",
+          "short": null,
+          "description": "Emit JSON result.",
+          "hasValue": false,
+          "valueHint": null,
+          "defaultValue": null
         }
       ],
+      "examples": [],
       "mcp": null
     },
     {
@@ -1680,8 +1846,8 @@
       "phase": 5,
       "args": [
         {
-          "name": "id",
-          "description": "Library id.",
+          "name": "library",
+          "description": "Library name or id.",
           "required": true,
           "variadic": false
         }
@@ -1689,8 +1855,16 @@
       "flags": [
         {
           "name": "yes",
-          "short": null,
+          "short": "y",
           "description": "Skip confirmation.",
+          "hasValue": false,
+          "valueHint": null,
+          "defaultValue": null
+        },
+        {
+          "name": "json",
+          "short": null,
+          "description": "Emit JSON result.",
           "hasValue": false,
           "valueHint": null,
           "defaultValue": null
@@ -1708,7 +1882,7 @@
       "args": [
         {
           "name": "library",
-          "description": "Video library id.",
+          "description": "Library name or id.",
           "required": true,
           "variadic": false
         }
@@ -1736,14 +1910,14 @@
     },
     {
       "name": "stream video upload",
-      "summary": "Upload a video to a library.",
+      "summary": "Upload a video file to a library.",
       "description": null,
       "status": "active",
       "phase": 5,
       "args": [
         {
           "name": "library",
-          "description": "Video library id.",
+          "description": "Library name or id.",
           "required": true,
           "variadic": false
         },
@@ -1758,7 +1932,7 @@
         {
           "name": "title",
           "short": null,
-          "description": "Video title.",
+          "description": "Video title (default: file name).",
           "hasValue": true,
           "valueHint": null,
           "defaultValue": null
@@ -1770,14 +1944,17 @@
           "hasValue": true,
           "valueHint": null,
           "defaultValue": null
-        }
-      ],
-      "examples": [
+        },
         {
-          "command": "bunny stream video upload abc-lib-id ./demo.mp4 --title=\"Product demo\"",
-          "description": "Upload with explicit title."
+          "name": "json",
+          "short": null,
+          "description": "Emit JSON result.",
+          "hasValue": false,
+          "valueHint": null,
+          "defaultValue": null
         }
       ],
+      "examples": [],
       "mcp": null
     },
     {
@@ -1789,7 +1966,7 @@
       "args": [
         {
           "name": "library",
-          "description": "Video library id.",
+          "description": "Library name or id.",
           "required": true,
           "variadic": false
         },
@@ -1803,8 +1980,16 @@
       "flags": [
         {
           "name": "yes",
-          "short": null,
+          "short": "y",
           "description": "Skip confirmation.",
+          "hasValue": false,
+          "valueHint": null,
+          "defaultValue": null
+        },
+        {
+          "name": "json",
+          "short": null,
+          "description": "Emit JSON result.",
           "hasValue": false,
           "valueHint": null,
           "defaultValue": null
@@ -1814,7 +1999,7 @@
       "mcp": null
     },
     {
-      "name": "containers app list",
+      "name": "containers list",
       "summary": "List Magic Containers apps.",
       "description": null,
       "status": "active",
@@ -1834,7 +2019,7 @@
       "mcp": null
     },
     {
-      "name": "containers app create",
+      "name": "containers create",
       "summary": "Create a Magic Containers app.",
       "description": null,
       "status": "planned",
@@ -1871,21 +2056,29 @@
           "hasValue": true,
           "valueHint": null,
           "defaultValue": null
+        },
+        {
+          "name": "json",
+          "short": null,
+          "description": "Emit JSON result.",
+          "hasValue": false,
+          "valueHint": null,
+          "defaultValue": null
         }
       ],
       "examples": [],
       "mcp": null
     },
     {
-      "name": "containers app delete",
+      "name": "containers delete",
       "summary": "Delete a Magic Containers app.",
       "description": null,
       "status": "active",
       "phase": 5,
       "args": [
         {
-          "name": "id",
-          "description": "App id.",
+          "name": "app",
+          "description": "App name or id.",
           "required": true,
           "variadic": false
         }
@@ -1893,8 +2086,16 @@
       "flags": [
         {
           "name": "yes",
-          "short": null,
+          "short": "y",
           "description": "Skip confirmation.",
+          "hasValue": false,
+          "valueHint": null,
+          "defaultValue": null
+        },
+        {
+          "name": "json",
+          "short": null,
+          "description": "Emit JSON result.",
           "hasValue": false,
           "valueHint": null,
           "defaultValue": null
@@ -1925,7 +2126,7 @@
     },
     {
       "name": "scripting deploy",
-      "summary": "Deploy an edge script from a source file (creates new, or updates by id).",
+      "summary": "Deploy an edge script from a file (updates the script with that name, else creates it).",
       "description": null,
       "status": "active",
       "phase": 5,
@@ -1941,15 +2142,7 @@
         {
           "name": "file",
           "short": null,
-          "description": "Local source file.",
-          "hasValue": true,
-          "valueHint": null,
-          "defaultValue": null
-        },
-        {
-          "name": "id",
-          "short": null,
-          "description": "Existing script id (update mode).",
+          "description": "Local source file (required).",
           "hasValue": true,
           "valueHint": null,
           "defaultValue": null
@@ -1957,20 +2150,24 @@
         {
           "name": "type",
           "short": null,
-          "description": "Numeric script type.",
+          "description": "Numeric script type (new scripts only).",
           "hasValue": true,
+          "valueHint": null,
+          "defaultValue": null
+        },
+        {
+          "name": "json",
+          "short": null,
+          "description": "Emit JSON result.",
+          "hasValue": false,
           "valueHint": null,
           "defaultValue": null
         }
       ],
       "examples": [
         {
-          "command": "bunny scripting deploy hello --file=./worker.js",
-          "description": "First deploy (creates)."
-        },
-        {
-          "command": "bunny scripting deploy hello --file=./worker.js --id=42",
-          "description": "Update existing script in place."
+          "command": "bunny scripting deploy my-script --file ./build/index.js",
+          "description": "Create or update."
         }
       ],
       "mcp": null
@@ -1983,8 +2180,8 @@
       "phase": 5,
       "args": [
         {
-          "name": "id",
-          "description": "Script id.",
+          "name": "script",
+          "description": "Script name or id.",
           "required": true,
           "variadic": false
         }
@@ -1992,8 +2189,16 @@
       "flags": [
         {
           "name": "yes",
-          "short": null,
+          "short": "y",
           "description": "Skip confirmation.",
+          "hasValue": false,
+          "valueHint": null,
+          "defaultValue": null
+        },
+        {
+          "name": "json",
+          "short": null,
+          "description": "Emit JSON result.",
           "hasValue": false,
           "valueHint": null,
           "defaultValue": null
@@ -2119,7 +2324,7 @@
       "args": [
         {
           "name": "topic",
-          "description": "Topic shortcut (e.g. storage, pullzone, dns) or path slug.",
+          "description": "Topic shortcut (e.g. storage, cdn, dns) or path slug.",
           "required": false,
           "variadic": false
         }
@@ -2135,7 +2340,7 @@
           "description": "Storage introduction."
         },
         {
-          "command": "bunny docs pullzone",
+          "command": "bunny docs cdn",
           "description": "CDN pull zone reference."
         }
       ],

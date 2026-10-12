@@ -20,6 +20,7 @@ const TOPIC_MAP: Record<string, string> = {
   stream: '/docs/stream-overview',
   containers: '/docs/magic-containers',
   scripting: '/docs/edge-scripting',
+  rule: '/docs/cdn-edge-rules',
   edgerule: '/docs/cdn-edge-rules',
   'edge-rule': '/docs/cdn-edge-rules',
   purge: '/reference/purgepublic_indexpost',

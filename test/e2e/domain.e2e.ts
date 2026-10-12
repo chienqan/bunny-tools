@@ -27,19 +27,19 @@ describe.skipIf(!E2E_ENABLED)('e2e: domain connect (idempotency)', () => {
   beforeAll(async () => {
     pullZoneName = uniqueId('domain-pz');
     const created = await bunnyCliOk([
-      'pullzone',
+      'cdn',
       'create',
       pullZoneName,
       '--origin=https://bunny.net',
     ]);
     pullZoneId = extractIdNumeric(created);
-    register('pullzone', pullZoneId, pullZoneName);
+    register('cdn', pullZoneId, pullZoneName);
   }, 30000);
 
   afterAll(async () => {
     // Best-effort: detach hostname before the pull-zone is deleted by
     // cleanup-registry. Hostname removal is non-fatal if it was never linked.
-    await bunnyCli(['pullzone', 'hostname', 'remove', String(pullZoneId), fakeHost]);
+    await bunnyCli(['cdn', 'hostname', 'remove', String(pullZoneId), fakeHost]);
     await cleanupAll();
   });
 
@@ -72,7 +72,7 @@ describe.skipIf(!E2E_ENABLED)('e2e: domain connect (idempotency)', () => {
     // emits a flat array of strings under --json (the MCP wrapper rewraps
     // it as `{hostnames: [...]}`; CLI is just the array).
     const list = await bunnyCliOk([
-      'pullzone',
+      'cdn',
       'hostname',
       'list',
       String(pullZoneId),

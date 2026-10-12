@@ -13,14 +13,14 @@ const RULE_BODY = JSON.stringify({
   Enabled: true,
 });
 
-describe.skipIf(!E2E_ENABLED)('e2e: pull-zone edge rules (Bug #5 regression)', () => {
+describe.skipIf(!E2E_ENABLED)('e2e: cdn edge rules (Bug #5 regression)', () => {
   let pzId = 0;
 
   beforeAll(async () => {
     const name = uniqueId('pz-er');
-    const created = await bunnyCliOk(['pullzone', 'create', name, '--origin=https://bunny.net']);
+    const created = await bunnyCliOk(['cdn', 'create', name, '--origin=https://bunny.net']);
     pzId = extractIdNumeric(created);
-    register('pullzone', pzId, name);
+    register('cdn', pzId, name);
   });
 
   afterAll(async () => {
@@ -32,26 +32,26 @@ describe.skipIf(!E2E_ENABLED)('e2e: pull-zone edge rules (Bug #5 regression)', (
     // {EdgeRules: [...]} which Bunny silently dropped. Real fix uses
     // /pullzone/{id}/edgerules/addOrUpdate. This test passes only when
     // the rule is actually persisted.
-    await bunnyCliOk(['pullzone', 'edgerule', 'add', String(pzId), `--rule=${RULE_BODY}`]);
+    await bunnyCliOk(['cdn', 'rule', 'add', String(pzId), `--rule=${RULE_BODY}`]);
 
-    const list = await bunnyCliOk(['pullzone', 'edgerule', 'list', String(pzId)]);
+    const list = await bunnyCliOk(['cdn', 'rule', 'list', String(pzId)]);
     expect(list.stdout).toMatch(/bt-e2e-cache-css/);
 
-    // Cross-check via pullzone get — both code paths must show the rule.
-    const detail = await bunnyCliOk(['pullzone', 'get', String(pzId)]);
+    // Cross-check via cdn get — both code paths must show the rule.
+    const detail = await bunnyCliOk(['cdn', 'get', String(pzId)]);
     expect(detail.stdout).toMatch(/bt-e2e-cache-css/);
   });
 
   it('delete by GUID + list confirms removal', async () => {
-    // pullzone get returns Hostname GUIDs first and EdgeRule GUIDs second —
-    // grab the GUID specifically from the edgerule list table to avoid
+    // cdn get returns Hostname GUIDs first and EdgeRule GUIDs second —
+    // grab the GUID specifically from the rule list table to avoid
     // accidentally trying to delete a hostname id as if it were a rule.
-    const list = await bunnyCliOk(['pullzone', 'edgerule', 'list', String(pzId)]);
+    const list = await bunnyCliOk(['cdn', 'rule', 'list', String(pzId)]);
     const guid = extractGuid(list.stdout);
 
-    await bunnyCliOk(['pullzone', 'edgerule', 'delete', String(pzId), guid]);
+    await bunnyCliOk(['cdn', 'rule', 'delete', String(pzId), guid]);
 
-    const after = await bunnyCliOk(['pullzone', 'edgerule', 'list', String(pzId)]);
+    const after = await bunnyCliOk(['cdn', 'rule', 'list', String(pzId)]);
     expect(after.stdout).not.toMatch(/bt-e2e-cache-css/);
   });
 });

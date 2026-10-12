@@ -56,42 +56,13 @@ export async function runConfigure(
   const pullZones = await acct.listPullZones().catch(() => []);
   cb.notify?.(`Validated: ${zones.length} storage zone(s), ${pullZones.length} pull zone(s).`);
 
-  // 3) Optional default storage zone + password.
-  let storageZone = input.storageZone;
-  if (!storageZone && options.interactive) {
-    if (zones.length > 0) {
-      const wantStorage = await cb.confirm({
-        message: 'Set up a default storage zone for this profile?',
-        default: true,
-      });
-      if (wantStorage) {
-        storageZone = await cb.pick({
-          name: 'storageZone',
-          message: 'Storage zone',
-          choices: zones.map((z) => ({
-            value: z.Name,
-            label: `${z.Name} (region=${z.Region}, files=${z.FilesStored})`,
-          })),
-        });
-      }
-    }
-  }
-
-  if (storageZone) {
-    const password =
-      input.storagePassword ??
-      (options.interactive
-        ? await cb.ask({
-            name: 'storagePassword',
-            message: `Storage zone password for "${storageZone}"`,
-            mode: 'mask',
-          })
-        : undefined);
-    if (password) {
-      await setCredential({ kind: 'storage', zone: storageZone }, password, { profile });
-      storedScopes.push(`${profile}:storage:${storageZone}`);
-      cb.notify?.('Storage zone password stored.');
-    }
+  // 3) Optional explicit storage zone password. Not prompted: with an account
+  // key stored, zone passwords are fetched on demand (core/scoped-key-resolver).
+  // Explicit flags remain for setups that pin a zone-scoped password.
+  if (input.storageZone && input.storagePassword) {
+    await setCredential({ kind: 'storage', zone: input.storageZone }, input.storagePassword, { profile });
+    storedScopes.push(`${profile}:storage:${input.storageZone}`);
+    cb.notify?.('Storage zone password stored.');
   }
 
   // 4) Optional Stream library + key.

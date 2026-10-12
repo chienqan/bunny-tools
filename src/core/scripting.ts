@@ -17,8 +17,9 @@ export async function getScript(id: number): Promise<EdgeScript> {
   return client().getEdgeScript(id);
 }
 
-// Deploy reads a local source file and creates (or updates) the script.
-// If `id` is provided, updates that script's code; otherwise creates new.
+// Deploy reads a local source file and upserts the script: an explicit `id`
+// or an existing script with the same name (case-insensitive) is updated;
+// otherwise a new script is created.
 export async function deployScript(opts: {
   name: string;
   filePath: string;
@@ -27,11 +28,14 @@ export async function deployScript(opts: {
 }): Promise<EdgeScript> {
   const code = await readFile(opts.filePath, 'utf8');
   const c = client();
-  if (opts.id !== undefined) {
+  const id =
+    opts.id ??
+    (await c.listEdgeScripts()).find((s) => s.Name.toLowerCase() === opts.name.toLowerCase())?.Id;
+  if (id !== undefined) {
     // Bunny's `POST /compute/script/{id}/code` returns 204 No Content, so we
     // re-fetch the script to give callers the up-to-date metadata they expect.
-    await c.updateEdgeScriptCode(opts.id, { Code: code });
-    return c.getEdgeScript(opts.id);
+    await c.updateEdgeScriptCode(id, { Code: code });
+    return c.getEdgeScript(id);
   }
   return c.createEdgeScript({
     Name: opts.name,

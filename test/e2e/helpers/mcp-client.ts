@@ -4,12 +4,10 @@
 // additional coverage.
 //
 // Tests pass `BUNNY_API_KEY` from the parent env so MCP-bound zone/dns
-// ops authenticate. Storage ops require a per-zone password injected at
-// spawn time via `BUNNY_STORAGE_PASSWORD_<ZONE_UPPER_UNDERSCORED>` — the
-// resolver chain reads that env var first when its scope is
-// `storage:<zone>`. Resolving env at spawn time means storage tests must
-// pre-fetch the password (via direct REST or the MCP zone_get tool BEFORE
-// trying any storage operation) and bake it into the spawn.
+// ops authenticate. Storage ops need nothing extra: the server fetches each
+// zone's password with the account API key on demand. An explicit
+// `BUNNY_STORAGE_PASSWORD[_<ZONE>]` in `extraEnv` still wins if a test
+// wants to pin it.
 
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { fileURLToPath } from 'node:url';

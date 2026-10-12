@@ -2,7 +2,9 @@
 // Edge rules live inside pull-zone responses; mutate via list+update flow.
 
 import { createAccountClient } from '../api/account.js';
-import type { PullZone, StorageZone } from '../api/account.js';
+import type { PullZone } from '../api/account.js';
+import { toPublicZone } from './storage-ops.js';
+import type { PublicStorageZone } from './storage-ops.js';
 import { resolveCredential } from '../config/credential-resolver.js';
 
 function client() {
@@ -10,16 +12,17 @@ function client() {
 }
 
 // Storage zones --------------------------------------------------------------
+// Results go through toPublicZone so zone passwords never reach stdout or MCP.
 
-export async function listStorageZones(): Promise<StorageZone[]> {
-  return client().listStorageZones();
+export async function listStorageZones(): Promise<PublicStorageZone[]> {
+  return (await client().listStorageZones()).map(toPublicZone);
 }
 
-export async function getStorageZone(idOrName: string | number): Promise<StorageZone> {
-  if (typeof idOrName === 'number') return client().getStorageZone(idOrName);
+export async function getStorageZone(idOrName: string | number): Promise<PublicStorageZone> {
+  if (typeof idOrName === 'number') return toPublicZone(await client().getStorageZone(idOrName));
   const found = await client().getStorageZoneByName(idOrName);
-  if (!found) throw new Error(`Storage zone "${idOrName}" not found.`);
-  return found;
+  if (!found) throw new Error(`Storage zone "${idOrName}" not found. Run \`bunny storage ls\` to see zones.`);
+  return toPublicZone(found);
 }
 
 export type StorageZoneCreateInput = {
@@ -29,17 +32,18 @@ export type StorageZoneCreateInput = {
   zoneTier?: number;
 };
 
-export async function createStorageZone(input: StorageZoneCreateInput): Promise<StorageZone> {
-  return client().createStorageZone({
+export async function createStorageZone(input: StorageZoneCreateInput): Promise<PublicStorageZone> {
+  const created = await client().createStorageZone({
     Name: input.name,
     ...(input.region ? { Region: input.region } : {}),
     ...(input.replicationRegions ? { ReplicationRegions: input.replicationRegions } : {}),
     ...(input.zoneTier !== undefined ? { ZoneTier: input.zoneTier } : {}),
   });
+  return toPublicZone(created);
 }
 
-export async function updateStorageZone(id: number, body: Record<string, unknown>): Promise<StorageZone> {
-  return client().updateStorageZone(id, body);
+export async function updateStorageZone(id: number, body: Record<string, unknown>): Promise<PublicStorageZone> {
+  return toPublicZone(await client().updateStorageZone(id, body));
 }
 
 export async function deleteStorageZone(id: number): Promise<void> {
@@ -181,7 +185,7 @@ export async function enablePullZoneSSL(
   if (!matchedBefore) {
     throw new Error(
       `${hostname} is not linked to pull zone "${pzBefore.Name}" (#${pzBefore.Id}). ` +
-        `Run: bunny pullzone hostname add ${pzBefore.Id} ${hostname}`,
+        `Run: bunny cdn hostname add ${pzBefore.Id} ${hostname}`,
     );
   }
   if (matchedBefore.HasCertificate === true) {
@@ -204,7 +208,7 @@ export async function enablePullZoneSSL(
       throw new Error(
         `Timed out after ${Math.round(elapsed / 1000)}s waiting for SSL certificate on ${hostname}. ` +
           `Cert provisioning may still complete in the background; re-run this command or inspect with ` +
-          `\`bunny pullzone get ${pullZoneId}\`.`,
+          `\`bunny cdn hostname list ${pullZoneId}\`.`,
       );
     }
     await sleep(pollIntervalMs);

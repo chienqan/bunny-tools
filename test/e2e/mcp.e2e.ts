@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { bunnyCliOk } from './helpers/bunny-cli.js';
 import { register, cleanupAll } from './helpers/cleanup-registry.js';
 import { spawnMcpClient, unwrapJson, type McpHandle } from './helpers/mcp-client.js';
-import { extractIdNumeric, extractPassword } from './helpers/parse-output.js';
+import { extractIdNumeric } from './helpers/parse-output.js';
 import { suitePrefix, uniqueId } from './helpers/prefix.js';
 import { E2E_ENABLED } from './helpers/env-guard.js';
 
@@ -15,17 +15,15 @@ import { E2E_ENABLED } from './helpers/env-guard.js';
 // validation, output serialization, and error envelopes are wrapper-layer
 // concerns that don't surface through CLI tests.
 //
-// Storage tests require a pre-fetched zone password baked into the MCP
-// server's env (the resolver chain reads BUNNY_STORAGE_PASSWORD at server
-// start, not per-call). beforeAll creates a throwaway zone via the CLI,
-// extracts its password, then spawns the MCP server with the password in
-// scope.
+// Storage tests need no zone password in the MCP server's env: storage
+// tools fetch it with the account API key on demand. beforeAll creates a
+// throwaway zone via the CLI and spawns the MCP server with only the
+// parent env, so the automatic password fallback is exercised too.
 
 describe.skipIf(!E2E_ENABLED)('e2e: MCP server', () => {
   let mcp: McpHandle;
   let storageZoneId = 0;
   let storageZoneName = '';
-  let storagePassword = '';
   let dnsZoneId = 0;
   let pullZoneId = 0;
   let pullZoneName = '';
@@ -36,16 +34,12 @@ describe.skipIf(!E2E_ENABLED)('e2e: MCP server', () => {
   const KNOWN_PURGE_URL = 'https://chien.b-cdn.net/no-such-file.js';
 
   beforeAll(async () => {
-    // 1. Create a throwaway storage zone via the CLI so we can extract its
-    // password and pass it to the MCP server's env. Cleanup-registry tracks
-    // both this zone and the DNS zone we'll create below.
+    // 1. Create a throwaway storage zone via the CLI. Cleanup-registry
+    // tracks both this zone and the DNS zone we'll create below.
     storageZoneName = uniqueId('mcp-zone');
-    const created = await bunnyCliOk(['storagezone', 'create', storageZoneName]);
+    const created = await bunnyCliOk(['storage', 'zone', 'create', storageZoneName]);
     storageZoneId = extractIdNumeric(created);
-    register('storagezone', storageZoneId, storageZoneName);
-
-    const detail = await bunnyCliOk(['storagezone', 'get', String(storageZoneId)]);
-    storagePassword = extractPassword(detail.stdout);
+    register('storage-zone', storageZoneId, storageZoneName);
 
     // 2. Same trick for DNS — pre-create a `.invalid` zone we can mutate
     // safely. Skipping DNS-zone create via MCP because our CLI suite
@@ -59,13 +53,13 @@ describe.skipIf(!E2E_ENABLED)('e2e: MCP server', () => {
     // through it, just exercise the hostname-list/add/remove/enable-ssl path.
     pullZoneName = uniqueId('mcp-pz');
     const pzCreated = await bunnyCliOk([
-      'pullzone',
+      'cdn',
       'create',
       pullZoneName,
       '--origin=https://bunny.net',
     ]);
     pullZoneId = extractIdNumeric(pzCreated);
-    register('pullzone', pullZoneId, pullZoneName);
+    register('cdn', pullZoneId, pullZoneName);
 
     // 2c. Auto-resolve BUNNY_E2E_DNS_ZONE_ID from BUNNY_E2E_DOMAIN. Pre-rc.52
     // both had to be supplied as separate env vars even though the id is
@@ -94,10 +88,9 @@ describe.skipIf(!E2E_ENABLED)('e2e: MCP server', () => {
     // returns 401 even though the password is correct.
     await new Promise((r) => setTimeout(r, 6000));
 
-    // 4. Spawn the MCP server with the storage password in scope.
-    mcp = await spawnMcpClient({
-      [`BUNNY_STORAGE_PASSWORD_${storageZoneName.replaceAll('-', '_').toUpperCase()}`]: storagePassword,
-    });
+    // 4. Spawn the MCP server. No storage password is injected; the server
+    // resolves it from the account API key.
+    mcp = await spawnMcpClient();
   }, 90000);
 
   afterAll(async () => {
@@ -128,19 +121,26 @@ describe.skipIf(!E2E_ENABLED)('e2e: MCP server', () => {
     const names = result.tools.map((t) => t.name);
     // Spot-check a handful — full list locked down in unit tests.
     expect(names).toContain('bunny.manifest');
-    expect(names).toContain('bunny.zones_list');
-    expect(names).toContain('bunny.zone_get');
     expect(names).toContain('bunny.deploy');
     expect(names).toContain('bunny.purge');
+    expect(names).toContain('bunny.storage_ls');
+    expect(names).toContain('bunny.storage_upload');
+    expect(names).toContain('bunny.storage_rm');
+    expect(names).toContain('bunny.storage_zone_list');
+    expect(names).toContain('bunny.storage_zone_create');
+    expect(names).toContain('bunny.storage_zone_delete');
+    expect(names).toContain('bunny.cdn_list');
+    expect(names).toContain('bunny.dns_list');
+    expect(names).toContain('bunny.dns_record_add');
+    expect(names).toContain('bunny.dns_record_delete');
     // rc.25 / rc.37: hostname tools (enable_ssl + force_ssl rolled into add).
-    expect(names).toContain('bunny.pullzone_hostname_list');
-    expect(names).toContain('bunny.pullzone_hostname_add');
-    expect(names).toContain('bunny.pullzone_hostname_remove');
+    expect(names).toContain('bunny.cdn_hostname_list');
+    expect(names).toContain('bunny.cdn_hostname_add');
+    expect(names).toContain('bunny.cdn_hostname_remove');
     // rc.34: atomic Connect Domain.
     expect(names).toContain('bunny.domain_connect');
     // rc.37: enable_ssl + force_ssl are GONE — rolled into add.
-    expect(names).not.toContain('bunny.pullzone_hostname_enable_ssl');
-    expect(names).not.toContain('bunny.pullzone_hostname_force_ssl');
+    expect(names.filter((n) => /enable_ssl|force_ssl/.test(n))).toEqual([]);
   });
 
   // -----------------------------------------------------------------------
@@ -168,43 +168,41 @@ describe.skipIf(!E2E_ENABLED)('e2e: MCP server', () => {
     expect(reg.commands.length).toBeGreaterThanOrEqual(40);
   });
 
-  it('bunny.zones_list (storage) returns array including our test zone', async () => {
-    const r = await mcp.client.callTool({
-      name: 'bunny.zones_list',
-      arguments: { type: 'storage' },
-    });
-    const zones = unwrapJson<Array<{ Id: number; Name: string }>>(
+  it('bunny.storage_zone_list returns array including our test zone (passwords stripped)', async () => {
+    const r = await mcp.client.callTool({ name: 'bunny.storage_zone_list', arguments: {} });
+    const zones = unwrapJson<Array<Record<string, unknown>>>(
       r as { content?: Array<{ type: string; text?: string }> },
     );
     expect(Array.isArray(zones)).toBe(true);
-    expect(zones.some((z) => z.Id === storageZoneId)).toBe(true);
+    const mine = zones.find((z) => z['Id'] === storageZoneId);
+    expect(mine).toBeDefined();
+    // Zone passwords never leave the server; storage tools fetch them on demand.
+    expect(mine).not.toHaveProperty('Password');
+    expect(mine).not.toHaveProperty('ReadOnlyPassword');
   });
 
-  it('bunny.zones_list (pull) returns array', async () => {
-    const r = await mcp.client.callTool({
-      name: 'bunny.zones_list',
-      arguments: { type: 'pull' },
-    });
+  it('bunny.cdn_list returns array including our test pull zone', async () => {
+    const r = await mcp.client.callTool({ name: 'bunny.cdn_list', arguments: {} });
     const zones = unwrapJson<Array<{ Id: number }>>(
       r as { content?: Array<{ type: string; text?: string }> },
     );
     expect(Array.isArray(zones)).toBe(true);
+    expect(zones.some((z) => z.Id === pullZoneId)).toBe(true);
   });
 
-  it('bunny.zone_get by numeric id returns Password field', async () => {
-    const r = await mcp.client.callTool({
-      name: 'bunny.zone_get',
-      arguments: { type: 'storage', idOrName: storageZoneId },
-    });
-    const zone = unwrapJson<{ Id: number; Name: string; Password: string }>(
+  it('bunny.storage_ls without target lists zones (passwords stripped)', async () => {
+    const r = await mcp.client.callTool({ name: 'bunny.storage_ls', arguments: {} });
+    const zones = unwrapJson<Array<Record<string, unknown>>>(
       r as { content?: Array<{ type: string; text?: string }> },
     );
-    expect(zone.Id).toBe(storageZoneId);
-    expect(zone.Password.length).toBeGreaterThan(10);
+    const mine = zones.find((z) => z['Name'] === storageZoneName);
+    expect(mine).toBeDefined();
+    expect(mine).not.toHaveProperty('Password');
+    expect(mine).not.toHaveProperty('ReadOnlyPassword');
   });
 
-  it('bunny.dns_records returns all zones when zoneId omitted', async () => {
-    const r = await mcp.client.callTool({ name: 'bunny.dns_records', arguments: {} });
+  it('bunny.dns_list returns all zones when zone omitted', async () => {
+    const r = await mcp.client.callTool({ name: 'bunny.dns_list', arguments: {} });
     const zones = unwrapJson<Array<{ Id: number; Records: unknown[] }>>(
       r as { content?: Array<{ type: string; text?: string }> },
     );
@@ -212,10 +210,10 @@ describe.skipIf(!E2E_ENABLED)('e2e: MCP server', () => {
     expect(zones.some((z) => z.Id === dnsZoneId)).toBe(true);
   });
 
-  it('bunny.dns_records returns just records when zoneId given', async () => {
+  it('bunny.dns_list returns just records when zone given', async () => {
     const r = await mcp.client.callTool({
-      name: 'bunny.dns_records',
-      arguments: { zoneId: dnsZoneId },
+      name: 'bunny.dns_list',
+      arguments: { zone: dnsZoneId },
     });
     const records = unwrapJson<Array<{ Id: number }>>(
       r as { content?: Array<{ type: string; text?: string }> },
@@ -227,7 +225,7 @@ describe.skipIf(!E2E_ENABLED)('e2e: MCP server', () => {
   // Storage tools — exercise the storage:<zone> credential resolver.
   // -----------------------------------------------------------------------
 
-  it('bunny.storage_list, upload, delete round-trip via MCP env', async () => {
+  it('bunny.storage_upload, storage_ls, storage_rm round-trip (password auto-fetched)', async () => {
     const tmp = await mkdtemp(join(tmpdir(), 'bt-mcp-storage-'));
     const localPath = join(tmp, 'mcp-test.txt');
     await writeFile(localPath, 'mcp-smoke');
@@ -236,7 +234,7 @@ describe.skipIf(!E2E_ENABLED)('e2e: MCP server', () => {
       // Upload
       const up = await mcp.client.callTool({
         name: 'bunny.storage_upload',
-        arguments: { zone: storageZoneName, local: localPath, remote: '/mcp-test.txt' },
+        arguments: { local: localPath, target: `${storageZoneName}/mcp-test.txt` },
       });
       // Surface the full response on error so failures are debuggable —
       // storage env propagation is the most likely failure mode here.
@@ -244,15 +242,16 @@ describe.skipIf(!E2E_ENABLED)('e2e: MCP server', () => {
         const text = (up as { content?: Array<{ text?: string }> }).content?.[0]?.text ?? '';
         throw new Error(`storage_upload returned isError: ${text}`);
       }
-      const upRes = unwrapJson<{ ok: boolean }>(
+      const upRes = unwrapJson<{ zone: string; path: string }>(
         up as { content?: Array<{ type: string; text?: string }> },
       );
-      expect(upRes.ok).toBe(true);
+      expect(upRes.zone).toBe(storageZoneName);
+      expect(upRes.path).toBe('/mcp-test.txt');
 
       // List — confirm the file appears
       const list = await mcp.client.callTool({
-        name: 'bunny.storage_list',
-        arguments: { zone: storageZoneName, path: '/' },
+        name: 'bunny.storage_ls',
+        arguments: { target: storageZoneName },
       });
       const entries = unwrapJson<Array<{ path?: string; size?: number; isDirectory?: boolean }>>(
         list as { content?: Array<{ type: string; text?: string }> },
@@ -262,8 +261,8 @@ describe.skipIf(!E2E_ENABLED)('e2e: MCP server', () => {
 
       // Delete — tool returns `{deleted: <count>}` not `{ok}`
       const del = await mcp.client.callTool({
-        name: 'bunny.storage_delete',
-        arguments: { zone: storageZoneName, path: '/mcp-test.txt' },
+        name: 'bunny.storage_rm',
+        arguments: { target: `${storageZoneName}/mcp-test.txt` },
       });
       const delRes = unwrapJson<{ deleted: number }>(
         del as { content?: Array<{ type: string; text?: string }> },
@@ -278,21 +277,23 @@ describe.skipIf(!E2E_ENABLED)('e2e: MCP server', () => {
   // Write tools with cleanup — round-trip create/delete through MCP.
   // -----------------------------------------------------------------------
 
-  it('bunny.zone_create + bunny.zone_delete round-trip', async () => {
+  it('bunny.storage_zone_create + bunny.storage_zone_delete (by name) round-trip', async () => {
     const name = uniqueId('mcp-zc');
     const created = await mcp.client.callTool({
-      name: 'bunny.zone_create',
-      arguments: { type: 'storage', name },
+      name: 'bunny.storage_zone_create',
+      arguments: { name },
     });
     const zone = unwrapJson<{ Id: number; Name: string }>(
       created as { content?: Array<{ type: string; text?: string }> },
     );
     expect(zone.Name).toBe(name);
-    register('storagezone', zone.Id, name);
+    expect(zone).not.toHaveProperty('Password');
+    expect(zone).not.toHaveProperty('ReadOnlyPassword');
+    register('storage-zone', zone.Id, name);
 
     const deleted = await mcp.client.callTool({
-      name: 'bunny.zone_delete',
-      arguments: { type: 'storage', id: zone.Id },
+      name: 'bunny.storage_zone_delete',
+      arguments: { zone: name },
     });
     const delRes = unwrapJson<{ ok: boolean }>(
       deleted as { content?: Array<{ type: string; text?: string }> },
@@ -300,11 +301,11 @@ describe.skipIf(!E2E_ENABLED)('e2e: MCP server', () => {
     expect(delRes.ok).toBe(true);
   });
 
-  it('bunny.dns_record_set + bunny.dns_record_delete round-trip', async () => {
+  it('bunny.dns_record_add + bunny.dns_record_delete round-trip', async () => {
     const set = await mcp.client.callTool({
-      name: 'bunny.dns_record_set',
+      name: 'bunny.dns_record_add',
       arguments: {
-        zoneId: dnsZoneId,
+        zone: dnsZoneId,
         type: 'TXT',
         name: 'mcp-e2e',
         value: 'smoke',
@@ -318,7 +319,7 @@ describe.skipIf(!E2E_ENABLED)('e2e: MCP server', () => {
 
     const deleted = await mcp.client.callTool({
       name: 'bunny.dns_record_delete',
-      arguments: { zoneId: dnsZoneId, recordId: record.Id },
+      arguments: { zone: dnsZoneId, recordId: record.Id },
     });
     const delRes = unwrapJson<{ ok: boolean }>(
       deleted as { content?: Array<{ type: string; text?: string }> },
@@ -335,7 +336,7 @@ describe.skipIf(!E2E_ENABLED)('e2e: MCP server', () => {
   it('bunny.purge accepts a CDN URL', async () => {
     const r = await mcp.client.callTool({
       name: 'bunny.purge',
-      arguments: { target: KNOWN_PURGE_URL },
+      arguments: { urls: [KNOWN_PURGE_URL] },
     });
     const res = unwrapJson<{ ok: number; failed: unknown[] }>(
       r as { content?: Array<{ type: string; text?: string }> },
@@ -370,15 +371,15 @@ describe.skipIf(!E2E_ENABLED)('e2e: MCP server', () => {
     }
     return false;
   }
-  it('bunny.pullzone_hostname_{list,add,remove} round-trip', async (ctx) => {
+  it('bunny.cdn_hostname_{list,add,remove} round-trip', async (ctx) => {
     if (skipIfNoDomain(ctx)) return;
     const e2eDomainEnv = process.env['BUNNY_E2E_DOMAIN']!;
     const host = `${suitePrefix()}-mcp-host.${e2eDomainEnv}`;
 
     const initial = unwrapJson<{ hostnames: string[] }>(
       (await mcp.client.callTool({
-        name: 'bunny.pullzone_hostname_list',
-        arguments: { pullZoneId },
+        name: 'bunny.cdn_hostname_list',
+        arguments: { pullZone: pullZoneId },
       })) as { content?: Array<{ type: string; text?: string }> },
     );
     expect(Array.isArray(initial.hostnames)).toBe(true);
@@ -389,8 +390,8 @@ describe.skipIf(!E2E_ENABLED)('e2e: MCP server', () => {
     // post-state in one read — no follow-up list call needed.
     const added = unwrapJson<{ ok: boolean; hostname: string; hostnames: string[] }>(
       (await mcp.client.callTool({
-        name: 'bunny.pullzone_hostname_add',
-        arguments: { pullZoneId, hostname: host },
+        name: 'bunny.cdn_hostname_add',
+        arguments: { pullZone: pullZoneId, hostname: host },
       })) as { content?: Array<{ type: string; text?: string }> },
     );
     expect(added.ok).toBe(true);
@@ -401,8 +402,8 @@ describe.skipIf(!E2E_ENABLED)('e2e: MCP server', () => {
     // still contain exactly one entry for this host.
     const reAdded = unwrapJson<{ ok: boolean; hostnames: string[] }>(
       (await mcp.client.callTool({
-        name: 'bunny.pullzone_hostname_add',
-        arguments: { pullZoneId, hostname: host },
+        name: 'bunny.cdn_hostname_add',
+        arguments: { pullZone: pullZoneId, hostname: host },
       })) as { content?: Array<{ type: string; text?: string }> },
     );
     expect(reAdded.ok).toBe(true);
@@ -410,8 +411,8 @@ describe.skipIf(!E2E_ENABLED)('e2e: MCP server', () => {
 
     const removed = unwrapJson<{ ok: boolean; hostname: string; hostnames: string[] }>(
       (await mcp.client.callTool({
-        name: 'bunny.pullzone_hostname_remove',
-        arguments: { pullZoneId, hostname: host },
+        name: 'bunny.cdn_hostname_remove',
+        arguments: { pullZone: pullZoneId, hostname: host },
       })) as { content?: Array<{ type: string; text?: string }> },
     );
     expect(removed.ok).toBe(true);
@@ -432,7 +433,7 @@ describe.skipIf(!E2E_ENABLED)('e2e: MCP server', () => {
   // both BUNNY_E2E_DOMAIN + DNS_ZONE_ID uniformly. Runtime skip — see
   // skipIfNoDomain comment above.
   it(
-    'bunny.pullzone_hostname_add provisions cert via DNS-01 in one call (rc.37)',
+    'bunny.cdn_hostname_add provisions cert via DNS-01 in one call (rc.37)',
     async (ctx) => {
       if (skipIfNoDomain(ctx)) return;
       const host = `${suitePrefix()}-cert.${process.env['BUNNY_E2E_DOMAIN']}`;
@@ -441,8 +442,8 @@ describe.skipIf(!E2E_ENABLED)('e2e: MCP server', () => {
       try {
         const result = unwrapJson<{ ok: boolean; hasCertificate?: boolean; forceSslSet?: boolean }>(
           (await mcp.client.callTool({
-            name: 'bunny.pullzone_hostname_add',
-            arguments: { pullZoneId, hostname: host },
+            name: 'bunny.cdn_hostname_add',
+            arguments: { pullZone: pullZoneId, hostname: host },
           })) as { content?: Array<{ type: string; text?: string }> },
         );
         expect(result.ok).toBe(true);
@@ -451,8 +452,8 @@ describe.skipIf(!E2E_ENABLED)('e2e: MCP server', () => {
         // Either is acceptable; the assertion is the cert provisioned.
       } finally {
         await mcp.client.callTool({
-          name: 'bunny.pullzone_hostname_remove',
-          arguments: { pullZoneId, hostname: host },
+          name: 'bunny.cdn_hostname_remove',
+          arguments: { pullZone: pullZoneId, hostname: host },
         });
       }
     },
@@ -464,17 +465,17 @@ describe.skipIf(!E2E_ENABLED)('e2e: MCP server', () => {
   // envelope is well-formed (not a crash).
   // -----------------------------------------------------------------------
 
-  it('bunny.zone_get returns isError envelope on missing required argument', async () => {
+  it('bunny.cdn_hostname_list returns isError envelope on missing required argument', async () => {
     // MCP encodes tool errors as `{isError: true, content: [{type:'text', text:'...'}]}`
     // rather than throwing. Test the protocol-level shape, not exception flow.
     const result = await mcp.client.callTool({
-      name: 'bunny.zone_get',
-      arguments: { type: 'storage' },
+      name: 'bunny.cdn_hostname_list',
+      arguments: {},
     });
     expect((result as { isError?: boolean }).isError).toBe(true);
     const text = (result as { content?: Array<{ type: string; text?: string }> }).content?.[0]
       ?.text ?? '';
-    expect(text).toMatch(/idOrName|required|invalid/i);
+    expect(text).toMatch(/pullZone|required|invalid/i);
   });
 
   // -----------------------------------------------------------------------
@@ -506,9 +507,9 @@ describe.skipIf(!E2E_ENABLED)('e2e: MCP server', () => {
         (await mcp.client.callTool({
           name: 'bunny.domain_connect',
           arguments: {
-            pullZoneId,
+            pullZone: pullZoneId,
             hostname: fqdn,
-            dnsZoneId,
+            dnsZone: dnsZoneId,
             recordName: fqdn.split('.')[0],
           },
         })) as { content?: Array<{ type: string; text?: string }> },
@@ -524,12 +525,12 @@ describe.skipIf(!E2E_ENABLED)('e2e: MCP server', () => {
         if (result.dnsRecordId) {
           await mcp.client.callTool({
             name: 'bunny.dns_record_delete',
-            arguments: { zoneId: dnsZoneId, recordId: result.dnsRecordId },
+            arguments: { zone: dnsZoneId, recordId: result.dnsRecordId },
           });
         }
         await mcp.client.callTool({
-          name: 'bunny.pullzone_hostname_remove',
-          arguments: { pullZoneId, hostname: fqdn },
+          name: 'bunny.cdn_hostname_remove',
+          arguments: { pullZone: pullZoneId, hostname: fqdn },
         });
       } catch {
         // best-effort cleanup

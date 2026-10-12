@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
-import { parsePurgeArg, runPurge } from '../../src/core/purge.js';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
+import { resolvePurgeTargets, runPurge } from '../../src/core/purge.js';
+import { getMockAgent } from '../setup.js';
 import type { AccountClient } from '../../src/api/account.js';
 
 function fakeClient(overrides: Partial<AccountClient> = {}): AccountClient {
@@ -20,32 +21,47 @@ function fakeClient(overrides: Partial<AccountClient> = {}): AccountClient {
   } as AccountClient;
 }
 
-describe('parsePurgeArg', () => {
-  it('parses a URL', () => {
-    expect(parsePurgeArg('https://cdn.example.com/x.js')).toEqual({
-      kind: 'url',
-      url: 'https://cdn.example.com/x.js',
+describe('resolvePurgeTargets', () => {
+  it('maps URLs to url targets', async () => {
+    expect(await resolvePurgeTargets({ urls: ['https://cdn.example.com/x.js'] })).toEqual([
+      { kind: 'url', url: 'https://cdn.example.com/x.js' },
+    ]);
+  });
+
+  it('numeric pull zone needs no lookup', async () => {
+    expect(await resolvePurgeTargets({ pullZone: '42' })).toEqual([{ kind: 'pullzone', pullZoneId: 42 }]);
+  });
+
+  it('pull zone + tag becomes a tag purge', async () => {
+    expect(await resolvePurgeTargets({ pullZone: 42, tag: 'app' })).toEqual([
+      { kind: 'tag', pullZoneId: 42, tag: 'app' },
+    ]);
+  });
+
+  it('resolves a pull zone by name', async () => {
+    const prev = process.env['BUNNY_API_KEY'];
+    process.env['BUNNY_API_KEY'] = 'test-key';
+    onTestFinished(() => {
+      if (prev === undefined) delete process.env['BUNNY_API_KEY'];
+      else process.env['BUNNY_API_KEY'] = prev;
     });
+    getMockAgent()
+      .get('https://api.bunny.net')
+      .intercept({ path: /\/pullzone.*/, method: 'GET' })
+      .reply(200, { Items: [{ Id: 7, Name: 'my-site', OriginUrl: null, Enabled: true, Hostnames: [] }], HasMoreItems: false });
+    expect(await resolvePurgeTargets({ pullZone: 'my-site' })).toEqual([{ kind: 'pullzone', pullZoneId: 7 }]);
   });
 
-  it('parses pullzone:<id>', () => {
-    expect(parsePurgeArg('pullzone:42')).toEqual({ kind: 'pullzone', pullZoneId: 42 });
+  it('rejects non-URL positional targets with a hint', async () => {
+    await expect(resolvePurgeTargets({ urls: ['pullzone:42'] })).rejects.toThrowError(/--pull-zone/);
   });
 
-  it('still accepts legacy pull-zone:<id> for migration', () => {
-    expect(parsePurgeArg('pull-zone:42')).toEqual({ kind: 'pullzone', pullZoneId: 42 });
+  it('rejects --tag without --pull-zone', async () => {
+    await expect(resolvePurgeTargets({ tag: 'app' })).rejects.toThrowError(/--pull-zone/);
   });
 
-  it('rejects bare "all"', () => {
-    expect(() => parsePurgeArg('all')).toThrowError(/pullzone/);
-  });
-
-  it('rejects bare "tag:"', () => {
-    expect(() => parsePurgeArg('tag:foo')).toThrowError(/pullzone/);
-  });
-
-  it('rejects unknown shape', () => {
-    expect(() => parsePurgeArg('foo')).toThrowError(/Unrecognized/);
+  it('returns no targets for an empty request (caller falls back to bunny.json)', async () => {
+    expect(await resolvePurgeTargets({})).toEqual([]);
   });
 });
 

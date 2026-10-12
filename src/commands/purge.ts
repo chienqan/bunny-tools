@@ -1,24 +1,43 @@
-// `bunny purge <target>` - standalone CDN cache purge.
+// `bunny purge` - standalone CDN cache purge.
+//   bunny purge <url...>                        purge specific URLs
+//   bunny purge --pull-zone <name|id>           purge a whole pull zone
+//   bunny purge --pull-zone <name|id> --tag t   purge one Cache-Tag
+//   bunny purge                                 purge the pull zones in bunny.json
 
 import type { ParsedInvocation } from '../manifest/types.js';
-import { parsePurgeArg, runPurgeCommand } from '../core/purge.js';
+import { resolvePurgeTargets, runPurgeTargets } from '../core/purge.js';
+import type { PurgeTarget } from '../core/purge.js';
+import { loadBunnyJson } from '../config/bunny-json.js';
 import { createProgress } from '../ui/progress.js';
+import { printJson } from '../ui/output.js';
 
 export async function run(inv: ParsedInvocation): Promise<number> {
   const progress = createProgress();
-  const args = inv.args as { target?: string };
-  if (!args.target) {
-    progress.fail('Purge target required: <url> | pull-zone:<id>.');
-    return 1;
+  const args = inv.args as { urls?: string[] };
+  const flags = inv.flags as { pullZone?: string; tag?: string; json?: boolean };
+
+  let targets: PurgeTarget[] = await resolvePurgeTargets({
+    urls: args.urls ?? [],
+    ...(flags.pullZone ? { pullZone: flags.pullZone } : {}),
+    ...(flags.tag ? { tag: flags.tag } : {}),
+  });
+
+  if (targets.length === 0) {
+    const ids = await loadBunnyJson()
+      .then(({ config }) => config.deploy.pullZones.map((p) => p.id))
+      .catch(() => [] as number[]);
+    if (ids.length === 0) {
+      progress.fail('Nothing to purge. Pass URLs, or `--pull-zone <name|id>` (see `bunny cdn list`).');
+      return 1;
+    }
+    targets = [{ kind: 'all', pullZoneIds: ids }];
   }
-  let target;
-  try {
-    target = parsePurgeArg(args.target);
-  } catch (err) {
-    progress.fail((err as Error).message);
-    return 1;
+
+  const result = await runPurgeTargets(targets);
+  if (flags.json) {
+    printJson(result);
+    return result.failed.length > 0 && result.ok === 0 ? 2 : 0;
   }
-  const result = await runPurgeCommand(target);
   for (const f of result.failed) progress.warn(`${f.target}: ${f.error}`);
   if (result.failed.length > 0 && result.ok === 0) {
     progress.fail('Purge failed.');

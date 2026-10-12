@@ -14,6 +14,10 @@ export type StorageZone = {
   FilesStored: number;
   ReplicationRegions: string[];
   PullZones: Array<{ Id: number; Name: string }>;
+  // Zone-scoped secrets returned to account-key callers. Used to derive the
+  // storage credential automatically; stripped before any user-facing output.
+  Password?: string;
+  ReadOnlyPassword?: string;
 };
 
 export type PullZoneHostname = {

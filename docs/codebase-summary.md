@@ -1,5 +1,7 @@
 # bunny-tools Codebase Summary
 
+> **Historical snapshot (rc.24).** Command names below predate the 0.2.0 redesign. For the current architecture and command tree, read [`system-architecture.md`](system-architecture.md) and [`../AGENTS.md`](../AGENTS.md).
+
 **Version:** v0.1.0-rc.24  
 **Last Updated:** 2026-05-03  
 **Total Files:** ~65 source + 40 test + 3 config files  

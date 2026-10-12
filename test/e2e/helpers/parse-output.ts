@@ -27,12 +27,6 @@ export function extractGuid(text: string): string {
   return m[0];
 }
 
-export function extractPassword(jsonStdout: string): string {
-  const m = jsonStdout.match(/"Password":\s*"([^"]+)"/);
-  if (!m?.[1]) throw new Error('no Password field in storage zone JSON');
-  return m[1];
-}
-
 export function extractApiKey(jsonStdout: string): string {
   const m = jsonStdout.match(/"ApiKey":\s*"([^"]+)"/);
   if (!m?.[1]) throw new Error('no ApiKey field in JSON');

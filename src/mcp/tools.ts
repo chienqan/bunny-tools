@@ -1,16 +1,17 @@
-// MCP tools - high-level surface (~10 + escape hatch). Each calls into
-// src/core/* directly (no CLI plumbing here). Inputs validated with zod.
+// MCP tools - high-level surface mirroring the CLI tree (storage_*, cdn_*,
+// dns_*, ...) plus an escape hatch. Each calls into src/core/* directly (no CLI
+// plumbing here). Inputs validated with zod. Resource refs accept a name /
+// domain or a numeric id, same as the CLI.
 
 import { z } from 'zod';
 import { spawn } from 'node:child_process';
 import { runDeploy } from '../core/deploy.js';
-import { parsePurgeArg, runPurgeCommand } from '../core/purge.js';
+import { resolvePurgeTargets, runPurgeTargets } from '../core/purge.js';
 import { listScopes } from '../core/auth.js';
 import { FEATURES, runInit } from '../core/init.js';
-import { listPath, deletePath, uploadFile } from '../core/storage-ops.js';
+import { listPath, listZones, deletePath, uploadFile, parseStorageTarget } from '../core/storage-ops.js';
 import {
   listStorageZones,
-  getStorageZone,
   createStorageZone,
   deleteStorageZone,
   listPullZones,
@@ -24,6 +25,7 @@ import {
   setHostnameForceSSL,
 } from '../core/zones.js';
 import { listZones as listDnsZones, listRecords, addRecord, deleteRecord } from '../core/dns.js';
+import { resolveDnsZoneId, resolvePullZoneId, resolveStorageZoneId } from '../core/resolve.js';
 import { loadBunnyJson } from '../config/bunny-json.js';
 import { registry } from '../manifest/registry.js';
 import { renderRegistryHelpJson } from '../manifest/render-help.js';
@@ -38,7 +40,54 @@ export type ToolDef = {
   run: (args: unknown) => Promise<unknown>;
 };
 
-const ZoneType = z.enum(['storage', 'pull']);
+// Name, domain, or numeric id.
+const Ref = z.union([z.string().min(1), z.number().int().positive()]);
+const RECORD_TYPES = [
+  'A', 'AAAA', 'CNAME', 'TXT', 'MX', 'REDIRECT', 'PULLZONE',
+  'SRV', 'CAA', 'PTR', 'SCRIPT', 'NS',
+] as const;
+
+const PurgeInput = z.object({
+  urls: z.array(z.string()).optional(),
+  pullZone: Ref.optional(),
+  tag: z.string().optional(),
+});
+const StorageLsInput = z.object({ target: z.string().optional(), recursive: z.boolean().optional() });
+const StorageUploadInput = z.object({ local: z.string(), target: z.string() });
+const StorageRmInput = z.object({ target: z.string(), recursive: z.boolean().optional() });
+const StorageZoneCreateInput = z.object({ name: z.string(), region: z.string().optional() });
+const StorageZoneRefInput = z.object({ zone: Ref });
+const CdnCreateInput = z.object({ name: z.string(), origin: z.string().url() });
+const PullZoneRefInput = z.object({ pullZone: Ref });
+const HostnameRefInput = z.object({ pullZone: Ref, hostname: z.string().min(1) });
+const HostnameAddInput = HostnameRefInput.extend({
+  noForceSSL: z.boolean().optional(),
+  timeoutMs: z.number().int().positive().max(300_000).optional(),
+});
+const DomainConnectInput = z.object({
+  pullZone: Ref,
+  hostname: z.string().min(1),
+  dnsZone: Ref.optional(),
+  recordName: z.string().optional(),
+  noForceSSL: z.boolean().optional(),
+});
+const DnsListInput = z.object({ zone: Ref.optional() });
+const DnsRecordAddInput = z.object({
+  zone: Ref,
+  type: z.enum(RECORD_TYPES),
+  name: z.string(),
+  // Optional for PULLZONE when pullZone is set; otherwise required.
+  value: z.string().optional(),
+  ttl: z.number().int().positive().optional(),
+  priority: z.number().int().nonnegative().optional(),
+  weight: z.number().int().nonnegative().optional(),
+  port: z.number().int().positive().optional(),
+  flags: z.number().int().nonnegative().optional(),
+  tag: z.string().optional(),
+  linkName: z.string().optional(),
+  pullZone: Ref.optional(),
+});
+const DnsRecordDeleteInput = z.object({ zone: Ref, recordId: z.number().int().positive() });
 
 export const TOOLS: ToolDef[] = [
   {
@@ -73,133 +122,117 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: 'bunny.purge',
-    description: 'Purge CDN cache. Target is a URL or "pull-zone:<id>". Returns ok/failed counts.',
-    inputSchema: z.object({ target: z.string() }),
+    description:
+      'Purge CDN cache. Pass `urls` (full URLs), and/or `pullZone` (name or id) to purge a whole zone, optionally narrowed by `tag` (Cache-Tag). Returns { ok, failed }.',
+    inputSchema: PurgeInput,
     run: async (raw) => {
-      const { target } = z.object({ target: z.string() }).parse(raw);
-      return runPurgeCommand(parsePurgeArg(target));
+      const args = PurgeInput.parse(raw);
+      const targets = await resolvePurgeTargets(args);
+      if (targets.length === 0) throw new Error('Pass `urls` and/or `pullZone`.');
+      return runPurgeTargets(targets);
     },
   },
   {
-    name: 'bunny.storage_list',
-    description: 'List a path within a storage zone.',
-    inputSchema: z.object({
-      zone: z.string(),
-      path: z.string().default('/'),
-      recursive: z.boolean().optional(),
-    }),
+    name: 'bunny.storage_ls',
+    description:
+      'List storage. Omit `target` to list all storage zones; pass "<zone>" or "<zone>/<path>" to list files. Only the account API key is needed (zone passwords are fetched automatically).',
+    inputSchema: StorageLsInput,
     run: async (raw) => {
-      const { zone, path, recursive } = z
-        .object({ zone: z.string(), path: z.string().default('/'), recursive: z.boolean().optional() })
-        .parse(raw);
-      return listPath(zone, path, recursive ? { recursive: true } : {});
+      const { target, recursive } = StorageLsInput.parse(raw);
+      if (!target) return listZones();
+      return listPath(parseStorageTarget(target), recursive ? { recursive: true } : {});
     },
   },
   {
     name: 'bunny.storage_upload',
-    description: 'Upload a local file to a storage zone path.',
-    inputSchema: z.object({ zone: z.string(), local: z.string(), remote: z.string() }),
+    description: 'Upload a local file to "<zone>/<path>". A trailing slash keeps the local file name. Returns { zone, path }.',
+    inputSchema: StorageUploadInput,
     run: async (raw) => {
-      const args = z.object({ zone: z.string(), local: z.string(), remote: z.string() }).parse(raw);
-      await uploadFile(args.zone, args.local, args.remote);
-      return { ok: true, remote: args.remote };
+      const args = StorageUploadInput.parse(raw);
+      const target = parseStorageTarget(args.target);
+      const path = await uploadFile(args.local, target);
+      return { zone: target.zone, path };
     },
   },
   {
-    name: 'bunny.storage_delete',
-    description: 'Delete a file or directory in a storage zone. Recursive when path resolves to a directory and recursive=true.',
-    inputSchema: z.object({ zone: z.string(), path: z.string(), recursive: z.boolean().optional() }),
+    name: 'bunny.storage_rm',
+    description: 'Delete a file at "<zone>/<path>", or a whole directory with recursive=true. Zone roots are refused. Returns { deleted }.',
+    inputSchema: StorageRmInput,
     run: async (raw) => {
-      const args = z.object({ zone: z.string(), path: z.string(), recursive: z.boolean().optional() }).parse(raw);
-      const count = await deletePath(args.zone, args.path, args.recursive ? { recursive: true } : {});
-      return { deleted: count };
+      const args = StorageRmInput.parse(raw);
+      const deleted = await deletePath(parseStorageTarget(args.target), args.recursive ? { recursive: true } : {});
+      return { deleted };
     },
   },
   {
-    name: 'bunny.zones_list',
-    description: 'List storage zones or pull zones.',
-    inputSchema: z.object({ type: ZoneType }),
+    name: 'bunny.storage_zone_list',
+    description: 'List storage zones with id, region, file count, size and replication (passwords stripped).',
+    inputSchema: z.object({}),
+    run: async () => listStorageZones(),
+  },
+  {
+    name: 'bunny.storage_zone_create',
+    description: 'Create a storage zone. `region` is a code like ny, la, sg.',
+    inputSchema: StorageZoneCreateInput,
     run: async (raw) => {
-      const { type } = z.object({ type: ZoneType }).parse(raw);
-      return type === 'storage' ? listStorageZones() : listPullZones();
+      const args = StorageZoneCreateInput.parse(raw);
+      return createStorageZone({ name: args.name, ...(args.region ? { region: args.region.toUpperCase() } : {}) });
     },
   },
   {
-    name: 'bunny.zone_get',
-    description: 'Get a storage or pull zone by id (numeric) or name.',
-    inputSchema: z.object({ type: ZoneType, idOrName: z.union([z.string(), z.number()]) }),
+    name: 'bunny.storage_zone_delete',
+    description: 'Delete a storage zone (name or id) and all its files.',
+    inputSchema: StorageZoneRefInput,
     run: async (raw) => {
-      const { type, idOrName } = z
-        .object({ type: ZoneType, idOrName: z.union([z.string(), z.number()]) })
-        .parse(raw);
-      if (type === 'storage') return getStorageZone(idOrName);
-      return getPullZone(typeof idOrName === 'number' ? idOrName : Number.parseInt(idOrName, 10));
+      const { zone } = StorageZoneRefInput.parse(raw);
+      const id = await resolveStorageZoneId(zone);
+      await deleteStorageZone(id);
+      return { ok: true, id };
     },
   },
   {
-    name: 'bunny.zone_create',
-    description: 'Create a storage or pull zone.',
-    inputSchema: z.object({
-      type: ZoneType,
-      name: z.string(),
-      origin: z.string().url().optional(),
-      region: z.string().optional(),
-    }),
+    name: 'bunny.cdn_list',
+    description: 'List pull zones (CDN) with their origins and hostnames.',
+    inputSchema: z.object({}),
+    run: async () => listPullZones(),
+  },
+  {
+    name: 'bunny.cdn_create',
+    description: 'Create a pull zone in front of an origin URL.',
+    inputSchema: CdnCreateInput,
     run: async (raw) => {
-      const args = z
-        .object({
-          type: ZoneType,
-          name: z.string(),
-          origin: z.string().url().optional(),
-          region: z.string().optional(),
-        })
-        .parse(raw);
-      if (args.type === 'storage') {
-        return createStorageZone({ name: args.name, ...(args.region ? { region: args.region } : {}) });
-      }
-      if (!args.origin) throw new Error('pull zone create requires `origin`.');
+      const args = CdnCreateInput.parse(raw);
       return createPullZone(args.name, args.origin);
     },
   },
   {
-    name: 'bunny.zone_delete',
-    description: 'Delete a storage or pull zone by numeric id.',
-    inputSchema: z.object({ type: ZoneType, id: z.number().int().positive() }),
+    name: 'bunny.cdn_delete',
+    description: 'Delete a pull zone (name or id).',
+    inputSchema: PullZoneRefInput,
     run: async (raw) => {
-      const { type, id } = z.object({ type: ZoneType, id: z.number().int().positive() }).parse(raw);
-      if (type === 'storage') await deleteStorageZone(id);
-      else await deletePullZone(id);
-      return { ok: true };
+      const { pullZone } = PullZoneRefInput.parse(raw);
+      const id = await resolvePullZoneId(pullZone);
+      await deletePullZone(id);
+      return { ok: true, id };
     },
   },
   {
-    name: 'bunny.pullzone_hostname_list',
-    description: 'List custom hostnames linked to a pull zone.',
-    inputSchema: z.object({ pullZoneId: z.number().int().positive() }),
+    name: 'bunny.cdn_hostname_list',
+    description: 'List custom hostnames linked to a pull zone (name or id).',
+    inputSchema: PullZoneRefInput,
     run: async (raw) => {
-      const { pullZoneId } = z.object({ pullZoneId: z.number().int().positive() }).parse(raw);
-      return { hostnames: await listPullZoneHostnames(pullZoneId) };
+      const { pullZone } = PullZoneRefInput.parse(raw);
+      return { hostnames: await listPullZoneHostnames(await resolvePullZoneId(pullZone)) };
     },
   },
   {
-    name: 'bunny.pullzone_hostname_add',
+    name: 'bunny.cdn_hostname_add',
     description:
       'Idempotent state-setter: link hostname + provision Let\'s Encrypt cert + enable ForceSSL (HTTP→HTTPS redirect). Pass `noForceSSL=true` to provision cert without the redirect (re-running with this flag flips ForceSSL OFF if previously on). Returns { ok, hostname, hostnames, hasCertificate, forceSslSet? }.',
-    inputSchema: z.object({
-      pullZoneId: z.number().int().positive(),
-      hostname: z.string().min(1),
-      noForceSSL: z.boolean().optional(),
-      timeoutMs: z.number().int().positive().max(300_000).optional(),
-    }),
+    inputSchema: HostnameAddInput,
     run: async (raw) => {
-      const { pullZoneId, hostname, noForceSSL, timeoutMs } = z
-        .object({
-          pullZoneId: z.number().int().positive(),
-          hostname: z.string().min(1),
-          noForceSSL: z.boolean().optional(),
-          timeoutMs: z.number().int().positive().max(300_000).optional(),
-        })
-        .parse(raw);
+      const { pullZone, hostname, noForceSSL, timeoutMs } = HostnameAddInput.parse(raw);
+      const pullZoneId = await resolvePullZoneId(pullZone);
 
       // Idempotent linking - only POST addHostname when not already present.
       const existing = await listPullZoneHostnames(pullZoneId);
@@ -211,17 +244,14 @@ export const TOOLS: ToolDef[] = [
         ...(timeoutMs !== undefined ? { timeoutMs } : {}),
         ...(noForceSSL ? { noForceSSL: true } : {}),
       });
-      // State assertion when --no-force-ssl: ensure ForceSSL=false even if a
-      // prior run left it true. enablePullZoneSSL with noForceSSL skips the
+      // State assertion when noForceSSL: ensure ForceSSL=false even if a prior
+      // run left it true. enablePullZoneSSL with noForceSSL skips the
       // auto-flip-on but doesn't actively turn it off.
       if (noForceSSL) {
         await setHostnameForceSSL(pullZoneId, hostname, false);
       }
-      // rc.53: include post-mutation hostnames list. Mirrors hostname_remove
-      // shape - every hostname-mutating MCP tool now returns { ok, hostname,
-      // hostnames, ... }. AI agents get post-state in one call instead of
-      // needing a follow-up hostname_list. One extra GET is cheap; the
-      // alternative (caller-side polling) is slower in aggregate.
+      // Every hostname-mutating tool returns { ok, hostname, hostnames, ... }
+      // so agents get post-state in one call.
       const hostnames = await listPullZoneHostnames(pullZoneId);
       return {
         ok: true,
@@ -234,56 +264,32 @@ export const TOOLS: ToolDef[] = [
     },
   },
   {
-    name: 'bunny.pullzone_hostname_remove',
-    description:
-      'Unlink a custom hostname from a pull zone. Returns { ok, hostname, hostnames }.',
-    inputSchema: z.object({
-      pullZoneId: z.number().int().positive(),
-      hostname: z.string().min(1),
-    }),
+    name: 'bunny.cdn_hostname_remove',
+    description: 'Unlink a custom hostname from a pull zone (name or id). Returns { ok, hostname, hostnames }.',
+    inputSchema: HostnameRefInput,
     run: async (raw) => {
-      const { pullZoneId, hostname } = z
-        .object({ pullZoneId: z.number().int().positive(), hostname: z.string().min(1) })
-        .parse(raw);
-      const hostnames = await removePullZoneHostname(pullZoneId, hostname);
-      // rc.53: include `hostname` (the one acted on) for symmetry with
-      // hostname_add. Every mutation tool says what was acted on AND
-      // returns the post-state list.
+      const { pullZone, hostname } = HostnameRefInput.parse(raw);
+      const hostnames = await removePullZoneHostname(await resolvePullZoneId(pullZone), hostname);
       return { ok: true, hostname, hostnames };
     },
   },
   {
     name: 'bunny.domain_connect',
     description:
-      'Atomic Connect Domain: link hostname to pull zone, provision Let\'s Encrypt cert (waits up to 90s), optionally create apex Type-7 DNS record. Mirrors the Bunny dashboard "Connect Domain" button. Idempotent - safe to re-run. Pass `dnsZoneId` to also create the DNS record. Returns { ok, hostname, hostnames, hasCertificate, dnsRecordId?, certWaitedMs }.',
-    inputSchema: z.object({
-      pullZoneId: z.number().int().positive(),
-      hostname: z.string().min(1),
-      dnsZoneId: z.number().int().positive().optional(),
-      recordName: z.string().optional(),
-      noForceSSL: z.boolean().optional(),
-    }),
+      'Atomic Connect Domain: link hostname to a pull zone (name or id), provision Let\'s Encrypt cert (waits up to 90s), optionally create the apex PULLZONE DNS record. Mirrors the Bunny dashboard "Connect Domain" button. Idempotent - safe to re-run. Pass `dnsZone` (domain or id) to also create the DNS record. Returns { ok, hostname, hostnames, hasCertificate, dnsRecordId?, certWaitedMs }.',
+    inputSchema: DomainConnectInput,
     run: async (raw) => {
-      const args = z
-        .object({
-          pullZoneId: z.number().int().positive(),
-          hostname: z.string().min(1),
-          dnsZoneId: z.number().int().positive().optional(),
-          recordName: z.string().optional(),
-          noForceSSL: z.boolean().optional(),
-        })
-        .parse(raw);
+      const args = DomainConnectInput.parse(raw);
+      const pullZoneId = await resolvePullZoneId(args.pullZone);
+      const dnsZoneId = args.dnsZone !== undefined ? await resolveDnsZoneId(args.dnsZone) : undefined;
       const { connectDomain } = await import('../core/domain.js');
-      const result = await connectDomain(args.pullZoneId, args.hostname, {
-        ...(args.dnsZoneId !== undefined ? { dnsZoneId: args.dnsZoneId } : {}),
+      const result = await connectDomain(pullZoneId, args.hostname, {
+        ...(dnsZoneId !== undefined ? { dnsZoneId } : {}),
         ...(args.recordName !== undefined ? { recordName: args.recordName } : {}),
         ...(args.noForceSSL ? { noForceSSL: true } : {}),
       });
-      // rc.53: enrich with post-state hostnames + the hostname acted on,
-      // unifying the shape with hostname_add and hostname_remove. Drop the
-      // `hostnameLinked` field - `hostnames.includes(hostname)` is the
-      // canonical post-state check.
-      const hostnames = await listPullZoneHostnames(args.pullZoneId);
+      // Same shape as the hostname tools: the hostname acted on + post-state list.
+      const hostnames = await listPullZoneHostnames(pullZoneId);
       return {
         ok: result.ok,
         hostname: args.hostname,
@@ -295,65 +301,29 @@ export const TOOLS: ToolDef[] = [
     },
   },
   {
-    name: 'bunny.dns_records',
-    description: 'List DNS records for a zone, or DNS zones if no zoneId given.',
-    inputSchema: z.object({ zoneId: z.number().int().positive().optional() }),
+    name: 'bunny.dns_list',
+    description: 'List DNS zones, or the records of one zone when `zone` (domain or id) is given.',
+    inputSchema: DnsListInput,
     run: async (raw) => {
-      const { zoneId } = z.object({ zoneId: z.number().int().positive().optional() }).parse(raw);
-      if (zoneId === undefined) return listDnsZones();
-      return listRecords(zoneId);
+      const { zone } = DnsListInput.parse(raw);
+      if (zone === undefined) return listDnsZones();
+      return listRecords(await resolveDnsZoneId(zone));
     },
   },
   {
-    name: 'bunny.dns_record_set',
+    name: 'bunny.dns_record_add',
     description:
-      'Add a DNS record. Standard types (A/AAAA/CNAME/TXT/MX/SRV/CAA/NS) plus Bunny routing types (REDIRECT/PULLZONE/PTR/SCRIPT). For PULLZONE: pass `pullZoneId` (number) and we auto-derive value+linkName - mirrors the CLI `--pull-zone` convenience. SCRIPT still requires linkName.',
-    inputSchema: z.object({
-      zoneId: z.number().int().positive(),
-      type: z.enum([
-        'A', 'AAAA', 'CNAME', 'TXT', 'MX', 'REDIRECT', 'PULLZONE',
-        'SRV', 'CAA', 'PTR', 'SCRIPT', 'NS',
-      ]),
-      name: z.string(),
-      // Optional for PULLZONE when pullZoneId is set; otherwise required.
-      value: z.string().optional(),
-      ttl: z.number().int().positive().optional(),
-      priority: z.number().int().nonnegative().optional(),
-      weight: z.number().int().nonnegative().optional(),
-      port: z.number().int().positive().optional(),
-      flags: z.number().int().nonnegative().optional(),
-      tag: z.string().optional(),
-      linkName: z.string().optional(),
-      pullZoneId: z.number().int().positive().optional(),
-    }),
+      'Add a DNS record to `zone` (domain or id). Standard types (A/AAAA/CNAME/TXT/MX/SRV/CAA/NS) plus Bunny routing types (REDIRECT/PULLZONE/PTR/SCRIPT). For PULLZONE: pass `pullZone` (name or id) and value+linkName are derived - mirrors the CLI `--pull-zone` convenience. SCRIPT still requires linkName.',
+    inputSchema: DnsRecordAddInput,
     run: async (raw) => {
-      const parsed = z
-        .object({
-          zoneId: z.number().int().positive(),
-          type: z.enum([
-            'A', 'AAAA', 'CNAME', 'TXT', 'MX', 'REDIRECT', 'PULLZONE',
-            'SRV', 'CAA', 'PTR', 'SCRIPT', 'NS',
-          ]),
-          name: z.string(),
-          value: z.string().optional(),
-          ttl: z.number().int().positive().optional(),
-          priority: z.number().int().nonnegative().optional(),
-          weight: z.number().int().nonnegative().optional(),
-          port: z.number().int().positive().optional(),
-          flags: z.number().int().nonnegative().optional(),
-          tag: z.string().optional(),
-          linkName: z.string().optional(),
-          pullZoneId: z.number().int().positive().optional(),
-        })
-        .parse(raw);
-      const { zoneId, pullZoneId, ...rest } = parsed;
+      const parsed = DnsRecordAddInput.parse(raw);
+      const { zone, pullZone, ...rest } = parsed;
 
-      // PULLZONE convenience: when pullZoneId is given, fetch the PZ and
-      // derive both Value (PZ name) and LinkName (PZ id as string). User
-      // can still pass value/linkName explicitly to override.
+      // PULLZONE convenience: derive Value (PZ name) and LinkName (PZ id).
+      // Explicit value/linkName still win.
       let resolved: typeof rest = rest;
-      if (parsed.type === 'PULLZONE' && pullZoneId !== undefined) {
-        const pz = await getPullZone(pullZoneId);
+      if (parsed.type === 'PULLZONE' && pullZone !== undefined) {
+        const pz = await getPullZone(await resolvePullZoneId(pullZone));
         resolved = {
           ...rest,
           value: rest.value ?? pz.Name,
@@ -364,22 +334,20 @@ export const TOOLS: ToolDef[] = [
       if (!resolved.value) {
         throw new Error(
           parsed.type === 'PULLZONE'
-            ? 'PULLZONE record requires either `pullZoneId` (recommended) or both `value` and `linkName`.'
+            ? 'PULLZONE record requires either `pullZone` (recommended) or both `value` and `linkName`.'
             : 'value is required',
         );
       }
-      return addRecord(zoneId, resolved);
+      return addRecord(await resolveDnsZoneId(zone), resolved);
     },
   },
   {
     name: 'bunny.dns_record_delete',
-    description: 'Delete a DNS record by zone + record id.',
-    inputSchema: z.object({ zoneId: z.number().int().positive(), recordId: z.number().int().positive() }),
+    description: 'Delete a DNS record by zone (domain or id) + record id.',
+    inputSchema: DnsRecordDeleteInput,
     run: async (raw) => {
-      const { zoneId, recordId } = z
-        .object({ zoneId: z.number().int().positive(), recordId: z.number().int().positive() })
-        .parse(raw);
-      await deleteRecord(zoneId, recordId);
+      const { zone, recordId } = DnsRecordDeleteInput.parse(raw);
+      await deleteRecord(await resolveDnsZoneId(zone), recordId);
       return { ok: true };
     },
   },

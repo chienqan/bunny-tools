@@ -35,7 +35,7 @@ const label = (s: string): string => pc.bold(s);
 // are folded INTO their parent service's count, not split into their own
 // pointer rows - that pattern was fragmenting root help in rc.20–37.
 //
-// Sub-group help (e.g. `bunny pullzone --help`) still expands every leaf
+// Sub-group help (e.g. `bunny cdn --help`) still expands every leaf
 // - see renderGroupChildren.
 const SECTIONS: Array<{ label: string; prefixes: string[] }> = [
   {
@@ -180,7 +180,7 @@ function findSpecByCommand(cmd: Command): CommandSpec | undefined {
 }
 
 // Walk up the parent chain to assemble the canonical full name (e.g.
-// `bunny pullzone edgerule add`). Used in the title + USAGE lines.
+// `bunny cdn rule add`). Used in the title + USAGE lines.
 function commandFullName(cmd: Command): string {
   const parts: string[] = [];
   let c: Command | null = cmd;
@@ -282,14 +282,14 @@ function belongsToGroup(commandName: string, prefixes: string[]): boolean {
   return prefixes.some((p) => commandName === p || commandName.startsWith(p + ' '));
 }
 
-// Group help (e.g. `bunny stream --help`, `bunny pullzone --help`): list
+// Group help (e.g. `bunny stream --help`, `bunny cdn --help`): list
 // ALL leaf descendants of this group regardless of depth. Earlier behaviour
 // stopped at immediate leaves + sub-group pointers, but that left groups
 // like `stream` (no direct leaves, only `library` / `video` subgroups)
 // showing nothing actionable - users had to drill twice to find a runnable
 // command. Showing every descendant collapses that into one help page.
 //
-// Long arg signatures (e.g. `bunny pullzone edgerule delete <pullZoneId>
+// Long arg signatures (e.g. `bunny cdn rule delete <pullZone>
 // <ruleGuid>`) may overflow the alignment column at this level; that's
 // acceptable here - root help is where alignment matters most, and root
 // already collapses 3+ segment commands to subgroup pointers.
