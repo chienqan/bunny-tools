@@ -89,7 +89,7 @@ No official Bunny CLI exists. Community alternatives (4 total) handle storage-on
 |-----------|-----------|
 | **Node 20+** | Target audience (web devs) universally available; GitHub Actions CI ready |
 | **MIT License** | Community-friendly; compatible with web dev ecosystem |
-| **Zero runtime deps** (besides commander, undici, zod, keytar, picocolors, ora) | Minimal supply chain risk; lean installation |
+| **Zero runtime deps** (besides commander, undici, zod, @napi-rs/keyring, picocolors, ora) | Minimal supply chain risk; lean installation |
 | **CommonJS + ESM hybrid ready** | npm v20 support; future TypeScript best-practice alignment |
 | **CLI first, library second** | Primary UX is `bunny` binary; programmatic access via core layer + MCP (P6) |
 | **No breaking changes in 0.1.x** | GA release should be stable; pre-GA alphas free to iterate |
@@ -183,7 +183,7 @@ All shipped same project (no split); 129 unit tests + 44 e2e tests passing; 51 a
 - `commander` - CLI framework
 - `undici` - HTTP client
 - `zod` - validation
-- `keytar` - OS keychain (optional native; graceful fallback to file)
+- `@napi-rs/keyring` - OS keychain (prebuilt native, no install scripts; graceful fallback to file)
 - `picocolors` - terminal colors
 - `ora` - progress spinner
 - `ignore` - gitignore parser

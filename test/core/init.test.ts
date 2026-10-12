@@ -3,13 +3,6 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-// Force keytar to be unavailable so setCredential falls back to file storage
-// in our per-test scratch dir (XDG_CONFIG_HOME). Without this, the OS keychain
-// persists creds across tests and breaks isolation.
-vi.mock('keytar', () => {
-  throw new Error('keytar disabled in tests');
-});
-
 import { runInit } from '../../src/core/init.js';
 import { getMockAgent } from '../setup.js';
 

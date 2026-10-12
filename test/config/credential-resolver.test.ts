@@ -69,14 +69,14 @@ describe('credential resolver', () => {
 
   it('flag override wins over everything', async () => {
     process.env['BUNNY_API_KEY'] = 'env-key';
-    const v = await resolveCredential({ kind: 'account' }, { flag: 'flag-key', keytar: null });
+    const v = await resolveCredential({ kind: 'account' }, { flag: 'flag-key', keychain: null });
     expect(v).toBe('flag-key');
   });
 
   it('scoped env beats generic env', async () => {
     process.env['BUNNY_STORAGE_PASSWORD_MY_APP'] = 'scoped';
     process.env['BUNNY_STORAGE_PASSWORD'] = 'generic';
-    const v = await resolveCredential({ kind: 'storage', zone: 'my-app' }, { keytar: null });
+    const v = await resolveCredential({ kind: 'storage', zone: 'my-app' }, { keychain: null });
     expect(v).toBe('scoped');
   });
 
@@ -87,7 +87,7 @@ describe('credential resolver', () => {
       deletePassword: vi.fn(),
       findCredentials: vi.fn(),
     };
-    const v = await resolveCredential({ kind: 'account' } as AuthScope, { keytar: fake });
+    const v = await resolveCredential({ kind: 'account' } as AuthScope, { keychain: fake });
     expect(v).toBe('kc-key');
     // rc.9: keychain entries are <profile>:<scope>; default profile maps to "default:account".
     expect(fake.getPassword).toHaveBeenCalledWith('bunny-tools', 'default:account');
@@ -101,7 +101,7 @@ describe('credential resolver', () => {
       findCredentials: vi.fn(),
     };
     await expect(
-      resolveCredential({ kind: 'account' } as AuthScope, { keytar: fake }),
+      resolveCredential({ kind: 'account' } as AuthScope, { keychain: fake }),
     ).rejects.toBeInstanceOf(AuthError);
   });
 
