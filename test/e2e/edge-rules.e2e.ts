@@ -49,7 +49,7 @@ describe.skipIf(!E2E_ENABLED)('e2e: cdn edge rules (Bug #5 regression)', () => {
     const list = await bunnyCliOk(['cdn', 'rule', 'list', String(pzId)]);
     const guid = extractGuid(list.stdout);
 
-    await bunnyCliOk(['cdn', 'rule', 'delete', String(pzId), guid]);
+    await bunnyCliOk(['cdn', 'rule', 'delete', String(pzId), guid, '--yes']);
 
     const after = await bunnyCliOk(['cdn', 'rule', 'list', String(pzId)]);
     expect(after.stdout).not.toMatch(/bt-e2e-cache-css/);
