@@ -7,6 +7,7 @@ import type { BunnyJson } from '../config/bunny-json.js';
 import { resolveCredential } from '../config/credential-resolver.js';
 import { createAccountClient, regionCodeToSubdomain } from '../api/account.js';
 import { createStorageClient } from '../api/storage.js';
+import { resolveScopedCredential } from './scoped-key-resolver.js';
 import { walkPublicDir } from '../deploy/walk.js';
 import { diffFiles } from '../deploy/diff.js';
 import { buildRemoteMap } from '../deploy/remote-list.js';
@@ -120,7 +121,8 @@ export async function runDeploy(opts: DeployOptions): Promise<DeployResult> {
 
   // 4. Load state cache + remote map.
   ev({ type: 'phase', phase: 'remote-list' });
-  const storageClient = createStorageClient({ resolveCredential: (s) => resolveCredential(s) });
+  // Scoped resolver: falls back to the zone password fetched with the account key.
+  const storageClient = createStorageClient({ resolveCredential: (s) => resolveScopedCredential(s) });
   const stateFile = join(opts.cwd, STATE_FILENAME);
   const cachedState = await loadState(stateFile);
   const remote = await buildRemoteMap(storageClient, zone, region, '/');

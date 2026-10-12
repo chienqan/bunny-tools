@@ -4,22 +4,31 @@
 import { readFile } from 'node:fs/promises';
 import { createStreamClient } from '../api/stream.js';
 import type { Video, VideoLibrary } from '../api/stream.js';
-import { resolveCredential } from '../config/credential-resolver.js';
+import { resolveScopedCredential } from './scoped-key-resolver.js';
 
+// Video calls need the per-library key; the scoped resolver fetches it with
+// the account key when none is stored.
 function client() {
-  return createStreamClient({ resolveCredential: (s) => resolveCredential(s) });
+  return createStreamClient({ resolveCredential: (s) => resolveScopedCredential(s) });
 }
 
-export async function listLibraries(): Promise<VideoLibrary[]> {
-  return client().listLibraries();
+// Library API keys are stripped from results; video commands fetch them on demand.
+export type PublicVideoLibrary = Omit<VideoLibrary, 'ApiKey' | 'ReadOnlyApiKey'>;
+function toPublicLibrary(l: VideoLibrary): PublicVideoLibrary {
+  const { ApiKey: _k, ReadOnlyApiKey: _r, ...rest } = l;
+  return rest;
 }
 
-export async function getLibrary(id: number): Promise<VideoLibrary> {
-  return client().getLibrary(id);
+export async function listLibraries(): Promise<PublicVideoLibrary[]> {
+  return (await client().listLibraries()).map(toPublicLibrary);
 }
 
-export async function createLibrary(name: string, replicationRegions?: string[]): Promise<VideoLibrary> {
-  return client().createLibrary(name, replicationRegions);
+export async function getLibrary(id: number): Promise<PublicVideoLibrary> {
+  return toPublicLibrary(await client().getLibrary(id));
+}
+
+export async function createLibrary(name: string, replicationRegions?: string[]): Promise<PublicVideoLibrary> {
+  return toPublicLibrary(await client().createLibrary(name, replicationRegions));
 }
 
 export async function deleteLibrary(id: number): Promise<void> {

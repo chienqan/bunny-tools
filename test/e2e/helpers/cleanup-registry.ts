@@ -6,12 +6,12 @@
 import { bunnyCli } from './bunny-cli.js';
 
 export type ResourceType =
-  | 'storagezone'
-  | 'pullzone'
+  | 'storage-zone'
+  | 'cdn'
   | 'dns'
   | 'stream-library'
   | 'scripting'
-  | 'containers-app';
+  | 'container';
 
 type Resource = { type: ResourceType; id: string; label?: string };
 
@@ -54,18 +54,18 @@ export async function cleanupAll(): Promise<{ deleted: number; failed: number }>
 async function deleteByType(type: ResourceType, id: string): Promise<void> {
   const args: string[] = (() => {
     switch (type) {
-      case 'storagezone':
-        return ['storagezone', 'delete', id, '--yes'];
-      case 'pullzone':
-        return ['pullzone', 'delete', id, '--yes'];
+      case 'storage-zone':
+        return ['storage', 'zone', 'delete', id, '--yes'];
+      case 'cdn':
+        return ['cdn', 'delete', id, '--yes'];
       case 'dns':
         return ['dns', 'delete', id, '--yes'];
       case 'stream-library':
         return ['stream', 'library', 'delete', id, '--yes'];
       case 'scripting':
         return ['scripting', 'delete', id, '--yes'];
-      case 'containers-app':
-        return ['containers', 'app', 'delete', id, '--yes'];
+      case 'container':
+        return ['containers', 'delete', id, '--yes'];
     }
   })();
   const r = await bunnyCli(args);

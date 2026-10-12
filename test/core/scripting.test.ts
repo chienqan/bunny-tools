@@ -38,15 +38,32 @@ describe('core/scripting', () => {
     expect(scripts).toHaveLength(1);
   });
 
-  it('deployScript creates a new script when no id given', async () => {
+  it('deployScript creates a new script when no script has that name', async () => {
     const file = join(scratch, 's.js');
     await writeFile(file, 'export default function () {}');
-    getMockAgent()
-      .get('https://api.bunny.net')
+    const pool = getMockAgent().get('https://api.bunny.net');
+    pool
+      .intercept({ path: /\/compute\/script\?.*/, method: 'GET' })
+      .reply(200, { Items: [{ Id: 3, Name: 'other' }], HasMoreItems: false });
+    pool
       .intercept({ path: '/compute/script', method: 'POST' })
       .reply(201, { Id: 7, Name: 'edge', Code: 'export default function () {}' });
     const r = await deployScript({ name: 'edge', filePath: file });
     expect(r.Id).toBe(7);
+  });
+
+  it('deployScript updates the existing script with the same name (case-insensitive)', async () => {
+    const file = join(scratch, 's.js');
+    await writeFile(file, 'v2');
+    const pool = getMockAgent().get('https://api.bunny.net');
+    pool
+      .intercept({ path: /\/compute\/script\?.*/, method: 'GET' })
+      .reply(200, { Items: [{ Id: 9, Name: 'Edge' }], HasMoreItems: false });
+    pool.intercept({ path: '/compute/script/9/code', method: 'POST' }).reply(204, '');
+    pool.intercept({ path: '/compute/script/9', method: 'GET' }).reply(200, { Id: 9, Name: 'Edge', Code: 'v2' });
+    const r = await deployScript({ name: 'edge', filePath: file });
+    expect(r.Id).toBe(9);
+    expect(r.Code).toBe('v2');
   });
 
   it('deployScript updates code when id given (re-fetches after 204)', async () => {

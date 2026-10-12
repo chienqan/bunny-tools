@@ -36,7 +36,7 @@ export async function run(inv: ParsedInvocation): Promise<number> {
       dnsCount = '(unreachable)';
     }
   } else {
-    progress.warn('No account credential set. Run `bunny init` or `bunny auth set --scope=account`.');
+    progress.warn('No account credential set. Run `bunny configure` to store your API key.');
   }
 
   const summary = {

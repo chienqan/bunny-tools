@@ -11,6 +11,7 @@ import {
   listPullZoneHostnames,
   listStorageZones,
   removePullZoneHostname,
+  updateStorageZone,
 } from '../../src/core/zones.js';
 import { getMockAgent } from '../setup.js';
 
@@ -49,6 +50,17 @@ describe('core/zones', () => {
     const zones = await listStorageZones();
     expect(zones).toHaveLength(2);
     expect(zones[0]?.Name).toBe('a');
+  });
+
+  it('updateStorageZone re-fetches after Bunny answers 204 and strips passwords', async () => {
+    const pool = getMockAgent().get('https://api.bunny.net');
+    pool.intercept({ path: '/storagezone/5', method: 'POST' }).reply(204, '');
+    pool.intercept({ path: '/storagezone/5', method: 'GET' }).reply(200, {
+      Id: 5, Name: 'z', Region: 'NY', StorageUsed: 0, FilesStored: 0, ReplicationRegions: ['LA'], PullZones: [], Password: 'secret',
+    });
+    const zone = await updateStorageZone(5, { ReplicationZones: ['LA'] });
+    expect(zone.ReplicationRegions).toEqual(['LA']);
+    expect(zone).not.toHaveProperty('Password');
   });
 
   it('addEdgeRule POSTs to /edgerules/addOrUpdate and re-lists', async () => {

@@ -3,6 +3,8 @@
 import { createAccountClient } from '../api/account.js';
 import type { AccountClient } from '../api/account.js';
 import { resolveCredential } from '../config/credential-resolver.js';
+import { ValidationError } from '../api/errors.js';
+import { resolvePullZoneId } from './resolve.js';
 
 export type PurgeTarget =
   | { kind: 'url'; url: string }
@@ -15,29 +17,48 @@ export type PurgeResult = {
   failed: Array<{ target: string; error: string }>;
 };
 
-export function parsePurgeArg(raw: string): PurgeTarget {
-  if (raw === 'all') {
-    throw new Error('`all` purge requires a pullzone context; use `pullzone:<id>` or configure pullZones in bunny.json.');
+export type PurgeRequest = {
+  urls?: string[];
+  // Pull zone name or numeric id.
+  pullZone?: string | number;
+  // Cache-Tag to purge within `pullZone` (origin must send Cache-Tag headers).
+  tag?: string;
+};
+
+// Turn CLI/MCP purge input into concrete targets:
+//   urls            → one URL purge each
+//   pullZone        → full pull-zone purge
+//   pullZone + tag  → tag purge on that zone
+//   (nothing)       → every pull zone listed in bunny.json (handled by caller)
+export async function resolvePurgeTargets(req: PurgeRequest): Promise<PurgeTarget[]> {
+  const urls = req.urls ?? [];
+  for (const u of urls) {
+    if (!/^https?:\/\//.test(u)) {
+      throw new ValidationError(`"${u}" is not a URL. Pass full URLs, or use --pull-zone <name|id> to purge a whole zone.`);
+    }
   }
-  if (raw.startsWith('tag:')) {
-    throw new Error('Tag purge requires a pullzone context; use `--purge=tag:<name>` inside `bunny deploy`.');
+  if (req.tag && req.pullZone === undefined) {
+    throw new ValidationError('--tag needs --pull-zone <name|id>.');
   }
-  // Accept both new `pullzone:` and legacy `pull-zone:` to ease migration mid-session.
-  const pzPrefix = raw.startsWith('pullzone:') ? 'pullzone:' : raw.startsWith('pull-zone:') ? 'pull-zone:' : null;
-  if (pzPrefix) {
-    const id = Number.parseInt(raw.slice(pzPrefix.length), 10);
-    if (!Number.isFinite(id)) throw new Error(`Invalid pullzone id in "${raw}".`);
-    return { kind: 'pullzone', pullZoneId: id };
+  const targets: PurgeTarget[] = urls.map((url) => ({ kind: 'url', url }));
+  if (req.pullZone !== undefined) {
+    const pullZoneId = await resolvePullZoneId(req.pullZone);
+    targets.push(req.tag ? { kind: 'tag', pullZoneId, tag: req.tag } : { kind: 'pullzone', pullZoneId });
   }
-  if (/^https?:\/\//.test(raw)) return { kind: 'url', url: raw };
-  throw new Error(`Unrecognized purge target "${raw}". Expected URL or "pullzone:<id>".`);
+  return targets;
 }
 
-// High-level entry used by `bunny purge` command - instantiates its own client
-// so the command layer doesn't need to import src/api/* directly.
-export async function runPurgeCommand(target: PurgeTarget): Promise<PurgeResult> {
+// High-level entry used by `bunny purge` and the MCP tool - instantiates its
+// own client so the command layer doesn't need to import src/api/* directly.
+export async function runPurgeTargets(targets: PurgeTarget[]): Promise<PurgeResult> {
   const client = createAccountClient({ resolveCredential: (s) => resolveCredential(s) });
-  return runPurge(client, target);
+  const total: PurgeResult = { ok: 0, failed: [] };
+  for (const t of targets) {
+    const r = await runPurge(client, t);
+    total.ok += r.ok;
+    total.failed.push(...r.failed);
+  }
+  return total;
 }
 
 export async function runPurge(

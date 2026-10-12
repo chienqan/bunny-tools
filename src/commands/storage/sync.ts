@@ -1,39 +1,30 @@
-// `storage sync` - thin sync of a local dir to a storage zone, no purge.
-// Reuses the walk + parallel-upload primitives from src/deploy/.
+// `bunny storage sync <dir> <zone[/path]>` - upload-only mirror of a local dir,
+// no CDN purge. Reuses the walk + parallel-upload primitives from src/deploy/.
 
 import type { ParsedInvocation } from '../../manifest/types.js';
 import { join } from 'node:path';
 import { walkPublicDir } from '../../deploy/walk.js';
 import { runPool, summarizeResults } from '../../deploy/upload-queue.js';
-import { resolveActiveZone, uploadFile } from '../../core/storage-ops.js';
+import { parseStorageTarget, uploadMany } from '../../core/storage-ops.js';
 import { createProgress } from '../../ui/progress.js';
+import { reportDone } from '../../ui/output.js';
 
 export async function run(inv: ParsedInvocation): Promise<number> {
   const progress = createProgress();
-  const args = inv.args as { local?: string; remote?: string };
-  const flags = inv.flags as { zone?: string; region?: string; concurrency?: string; delete?: boolean };
-  if (!args.local) {
-    progress.fail('Usage: bunny storage sync <local> [remote] [--zone=<name>]');
-    return 1;
-  }
-  let zone: string;
-  try {
-    zone = await resolveActiveZone(flags.zone);
-  } catch (err) {
-    progress.fail((err as Error).message);
-    return 1;
-  }
+  const args = inv.args as { local: string; target: string };
+  const flags = inv.flags as { region?: string; concurrency?: string; json?: boolean };
+  const target = parseStorageTarget(args.target);
   const concurrency = flags.concurrency ? Number.parseInt(flags.concurrency, 10) : 8;
-  const remoteRoot = (args.remote ?? '/').replace(/\/+$/, '');
+  const remoteRoot = target.path.replace(/\/+$/, '');
 
   const files = await walkPublicDir({ publicDir: args.local });
-  progress.info(`syncing ${files.length} files to ${zone}:${remoteRoot}/`);
+  progress.info(`syncing ${files.length} files to ${target.zone}${remoteRoot}/`);
 
-  const jobs = files.map((f) => async () => {
-    const remote = `${remoteRoot}/${f.path}`.replace(/^\/+/, '/');
-    await uploadFile(zone, join(args.local!, f.path), remote, flags.region);
-  });
-
+  const jobs = await uploadMany(
+    target.zone,
+    files.map((f) => ({ local: join(args.local, f.path), remote: `${remoteRoot}/${f.path}` })),
+    flags.region ? { region: flags.region } : {},
+  );
   const results = await runPool(jobs, {
     concurrency,
     onProgress: (c, t) => progress.update(`uploaded ${c}/${t}`),
@@ -44,6 +35,6 @@ export async function run(inv: ParsedInvocation): Promise<number> {
     progress.fail(`Sync finished with ${sum.failed} failure(s).`);
     return 2;
   }
-  progress.succeed(`Synced ${sum.ok} files.`);
+  reportDone(progress, flags.json, { zone: target.zone, path: `${remoteRoot}/`, uploaded: sum.ok }, `Synced ${sum.ok} files.`);
   return 0;
 }

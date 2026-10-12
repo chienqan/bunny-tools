@@ -21,7 +21,7 @@ export default async function setup(): Promise<void> {
   if (!process.env['BUNNY_API_KEY']) return;
 
   const stale: ListedRow[] = [];
-  for (const type of ['storagezone', 'pullzone', 'dns', 'stream-library', 'scripting'] as const) {
+  for (const type of ['storage-zone', 'cdn', 'dns', 'stream-library', 'scripting'] as const) {
     try {
       const rows = await listResources(type);
       for (const r of rows) {
@@ -49,18 +49,18 @@ async function listResources(type: ResourceType): Promise<ListedRow[]> {
   // tied to the underlying Bunny API and is therefore much more stable.
   const args = (() => {
     switch (type) {
-      case 'storagezone':
-        return ['storagezone', 'list', '--json'];
-      case 'pullzone':
-        return ['pullzone', 'list', '--json'];
+      case 'storage-zone':
+        return ['storage', 'zone', 'list', '--json'];
+      case 'cdn':
+        return ['cdn', 'list', '--json'];
       case 'dns':
         return ['dns', 'list', '--json'];
       case 'stream-library':
         return ['stream', 'library', 'list', '--json'];
       case 'scripting':
         return ['scripting', 'list', '--json'];
-      case 'containers-app':
-        return ['containers', 'app', 'list', '--json'];
+      case 'container':
+        return ['containers', 'list', '--json'];
     }
   })();
   const r = await bunnyCli(args);
@@ -89,18 +89,18 @@ async function listResources(type: ResourceType): Promise<ListedRow[]> {
 async function deleteOne(r: ListedRow): Promise<void> {
   const args = (() => {
     switch (r.type) {
-      case 'storagezone':
-        return ['storagezone', 'delete', r.id, '--yes'];
-      case 'pullzone':
-        return ['pullzone', 'delete', r.id, '--yes'];
+      case 'storage-zone':
+        return ['storage', 'zone', 'delete', r.id, '--yes'];
+      case 'cdn':
+        return ['cdn', 'delete', r.id, '--yes'];
       case 'dns':
         return ['dns', 'delete', r.id, '--yes'];
       case 'stream-library':
         return ['stream', 'library', 'delete', r.id, '--yes'];
       case 'scripting':
         return ['scripting', 'delete', r.id, '--yes'];
-      case 'containers-app':
-        return ['containers', 'app', 'delete', r.id, '--yes'];
+      case 'container':
+        return ['containers', 'delete', r.id, '--yes'];
     }
   })();
   await bunnyCli(args);

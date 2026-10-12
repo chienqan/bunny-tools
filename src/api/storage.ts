@@ -13,10 +13,24 @@ export type StorageEntry = {
   IsDirectory: boolean;
   LastChanged: string;
   // ETag/Checksum may or may not be present depending on API. Bunny exposes
-  // a `Checksum` field on storage list - sha256 of the file. We use it for
+  // a `Checksum` field on directory listings - sha256 of the file. We use it for
   // diff when present; SHA256 of local file is the source of truth otherwise.
   Checksum?: string;
 };
+
+// Percent-encode each path segment so `?`, `#`, `%` and spaces stay part of the
+// file name. Dot segments are refused outright: URL parsing would resolve them
+// (even as %2e) and retarget the request at a parent directory.
+function encodeSegments(path: string): string {
+  if (path.length === 0) return '';
+  return path
+    .split('/')
+    .map((seg) => {
+      if (seg === '.' || seg === '..') throw new Error(`Refusing storage path with "${seg}" segment: ${path}`);
+      return encodeURIComponent(seg);
+    })
+    .join('/');
+}
 
 export type StorageClientOptions = {
   resolveCredential: CredentialResolver;
@@ -27,7 +41,7 @@ export function createStorageClient(opts: StorageClientOptions) {
 
   function joinPath(zone: string, path: string): string {
     const clean = path.replace(/^\/+|\/+$/g, '');
-    return `/${zone}/${clean}`;
+    return `/${encodeSegments(zone)}/${encodeSegments(clean)}`;
   }
 
   return {
@@ -73,7 +87,7 @@ export function createStorageClient(opts: StorageClientOptions) {
       // the directory URL explicitly. Default `/` resolves to the zone root.
       const safePath = typeof path === 'string' && path.length > 0 ? path : '/';
       const cleanDir = safePath.replace(/^\/+/, '').replace(/\/+$/, '');
-      const dirPath = cleanDir.length > 0 ? `/${zone}/${cleanDir}/` : `/${zone}/`;
+      const dirPath = cleanDir.length > 0 ? `/${encodeSegments(zone)}/${encodeSegments(cleanDir)}/` : `/${encodeSegments(zone)}/`;
       const result = await callBunny<StorageEntry[] | null>({
         base: storageBaseUrl(region),
         path: dirPath,
@@ -87,7 +101,7 @@ export function createStorageClient(opts: StorageClientOptions) {
 export type StorageClient = ReturnType<typeof createStorageClient>;
 
 // Recursive listing - flattens directory tree into a single array of files
-// (no directories). Used by deploy diff + storage:list --recursive.
+// (no directories). Used by deploy diff + `storage ls -r`.
 export async function listRecursive(
   client: StorageClient,
   zone: string,

@@ -83,10 +83,10 @@ describe('help smoke', () => {
   });
 
   it('leaves without examples skip the EXAMPLES block', () => {
-    // `pullzone get` has no examples in the registry — confirms the block
+    // `cdn get` has no examples in the registry — confirms the block
     // is conditional, not always-on with empty rows.
-    const pullzone = program.commands.find((c) => c.name() === 'pullzone');
-    const get = pullzone?.commands.find((c) => c.name() === 'get');
+    const cdn = program.commands.find((c) => c.name() === 'cdn');
+    const get = cdn?.commands.find((c) => c.name() === 'get');
     expect(get).toBeDefined();
     const help = stripAnsi(get!.helpInformation());
     expect(help).not.toContain('EXAMPLES');

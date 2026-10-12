@@ -148,19 +148,19 @@ export async function runInit(
       cb.notify?.(`Stream library key stored for library ${input.streamLibraryId}.`);
     } else {
       cb.notify?.(
-        'Stream selected - set per-library keys later via `bunny auth set --scope stream:<libraryId>`.',
+        'Stream selected - library keys are fetched with your API key; manage videos via `bunny stream video ...`.',
       );
     }
   }
 
   if (features.includes('dns')) {
-    cb.notify?.('DNS selected - manage records via `bunny dns:*`. No project config needed.');
+    cb.notify?.('DNS selected - manage records via `bunny dns record ...`. No project config needed.');
   }
   if (features.includes('containers')) {
-    cb.notify?.('Magic Containers selected - manage via `bunny containers:*`. No project config needed.');
+    cb.notify?.('Magic Containers selected - manage via `bunny containers ...`. No project config needed.');
   }
   if (features.includes('scripting')) {
-    cb.notify?.('Edge Scripting selected - manage via `bunny scripting:*`. No project config needed.');
+    cb.notify?.('Edge Scripting selected - manage via `bunny scripting ...`. No project config needed.');
   }
 
   // Step 4 - Write artifacts.
@@ -227,9 +227,9 @@ async function configureStorage(
   }
 
   let passwordStored = false;
-  const password =
-    input.storagePassword ??
-    (interactive ? await cb.ask({ name: 'storagePassword', message: `Storage zone password for "${storageZone}"`, mode: 'mask' }) : undefined);
+  // No prompt: the zone password is fetched with the account key at deploy time.
+  // An explicit --storage-password is still stored (e.g. CI without an account key).
+  const password = input.storagePassword;
   if (password) {
     await setCredential({ kind: 'storage', zone: storageZone }, password);
     passwordStored = true;

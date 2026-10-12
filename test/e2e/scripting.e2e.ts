@@ -26,7 +26,7 @@ describe.skipIf(!E2E_ENABLED)('e2e: Edge Scripting (Bug #7 regression)', () => {
     await cleanupAll();
   });
 
-  it('deploy create + list + update via --id (Bug #7) + delete', async () => {
+  it('deploy create + list + upsert-by-name update (Bug #7) + delete', async () => {
     const name = uniqueId('script');
     const created = await bunnyCliOk(['scripting', 'deploy', name, `--file=${scriptPath}`]);
     const id = extractIdNumeric(created);
@@ -36,8 +36,9 @@ describe.skipIf(!E2E_ENABLED)('e2e: Edge Scripting (Bug #7 regression)', () => {
     expect(list.stdout).toMatch(new RegExp(name));
 
     // Bug #7 regression: update mode used to crash because /code returns 204
-    // and the client tried to read .Name from undefined. Must succeed AND
-    // surface the script's name in the success message.
+    // and the client tried to read .Name from undefined. Re-deploying the
+    // same name must update in place (same id, no duplicate script) and
+    // surface the script's name in the result.
     await writeFile(
       scriptPath,
       "addEventListener('fetch', e => e.respondWith(new Response('v2')))\n",
@@ -47,10 +48,15 @@ describe.skipIf(!E2E_ENABLED)('e2e: Edge Scripting (Bug #7 regression)', () => {
       'deploy',
       name,
       `--file=${scriptPath}`,
-      `--id=${id}`,
+      '--json',
     ]);
-    expect(updated.stderr + updated.stdout).toMatch(/Updated edge script/);
-    expect(updated.stderr + updated.stdout).toMatch(new RegExp(name));
+    const script = JSON.parse(updated.stdout) as { Id: number; Name: string };
+    expect(script.Id).toBe(id);
+    expect(script.Name).toBe(name);
+
+    const listJson = await bunnyCliOk(['scripting', 'list', '--json']);
+    const scripts = JSON.parse(listJson.stdout) as Array<{ Id: number; Name: string }>;
+    expect(scripts.filter((s) => s.Name === name).length).toBe(1);
 
     await bunnyCliOk(['scripting', 'delete', String(id), '--yes']);
 

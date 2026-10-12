@@ -4,6 +4,75 @@ All notable changes to bunny-tools are documented here. This changelog follows [
 
 ---
 
+## [0.2.0] - 2026-10-12
+
+CLI redesign: commands you can guess, one credential, agent-friendly output. **Breaking:** old command names are removed (no aliases); see the migration table.
+
+### Changed
+- **Storage uses aws-s3 style addressing.** `bunny storage ls` with no argument lists storage zones; `<zone>/<path>` addresses files everywhere (`ls`, `upload`, `download`, `rm`, `sync`). The `--zone` flag is gone.
+- **Zone management moved under storage:** `storagezone *` → `storage zone *`.
+- **`pullzone` renamed to `cdn`,** edge rules to `cdn rule`.
+- **`containers app *` flattened** to `containers *`.
+- **Names instead of ids.** Pull zones, storage zones, Stream libraries, edge scripts and container apps accept a name or id; DNS zones accept the domain or id.
+- **`purge` takes URLs or `--pull-zone <name|id> [--tag <tag>]`.** No arguments purges the pull zones in `bunny.json`.
+- **`scripting deploy` upserts by name** (the `--id` flag is removed).
+- **Verbs are consistent:** every `list` also answers to `ls`, every `delete` to `rm`.
+- **`--json` on every command that prints a result**, including create/update/delete/upload; destructive commands share one `--yes` confirmation path (`-y` short flag).
+- **MCP tools renamed to mirror the CLI** and accept names: see table below.
+- **Help and AGENTS.md** group commands by resource and show argument signatures.
+
+### Added
+- **Automatic storage zone passwords and Stream library keys.** With only the account API key stored, bunny-tools fetches the scoped secret on demand (memory only, never written to disk). Explicit `BUNNY_STORAGE_PASSWORD_<ZONE>` / `BUNNY_STREAM_KEY_<ID>` / keychain entries still win. `bunny configure` and `bunny init` no longer prompt for zone passwords.
+- `docs/system-architecture.md` rewritten as a compact, current map for humans and AI agents.
+
+### Fixed
+- `storage sync` looked up the zone region once per file; it now resolves once per run.
+- Variadic CLI arguments were wrapped in a nested array.
+- Error hints pointed at commands that do not exist (`pullzone hostname enable-ssl`, `auth set`, `storage-zone:get`, ...).
+- `storage zone update` re-fetches the zone (Bunny answers 204) instead of failing after a successful update.
+- `purge` exits 2 when any target fails, matching the documented partial-failure contract.
+- `cdn rule delete` and `cdn hostname remove` ask for confirmation (or `--yes`) like other destructive commands.
+- Unknown commands exit 1 with a rename hint instead of printing help and exiting 0.
+
+### Security
+- Storage zone `Password`/`ReadOnlyPassword` and Stream library `ApiKey`/`ReadOnlyApiKey` are stripped from all CLI and MCP output (previously printed by `storagezone get` and `--json` lists).
+- Storage paths reject `.`/`..` segments and `?`, `#`, `\`, and every segment is percent-encoded. Previously `storage rm my-zone/. -r` (or `my-zone/a/..`, `my-zone/#`) slipped past the zone-root guard after URL normalization and deleted every file in the zone, and `rm my-zone/img/#a.png` deleted the whole `img/` directory. The same guard covers `deploy`.
+- `storage rm` without `-r` refuses directories (Bunny deletes directories recursively).
+- Storage region codes are validated before becoming a hostname label, so a crafted `--region` / `.bunnyrc` value cannot redirect requests carrying the zone password.
+- A generic `BUNNY_STORAGE_PASSWORD` / `BUNNY_STREAM_KEY` no longer overrides the exact per-zone key fetched with the account key; it is used only as a last resort.
+
+### Migration from 0.1.x
+
+| 0.1.x | 0.2.0 |
+| --- | --- |
+| `bunny storage list /dir --zone=my-zone` | `bunny storage ls my-zone/dir` |
+| `bunny storagezone list` | `bunny storage ls` or `bunny storage zone list` |
+| `bunny storage upload ./a.png /img/a.png --zone=my-zone` | `bunny storage upload ./a.png my-zone/img/a.png` |
+| `bunny storage download /a.png ./a.png --zone=my-zone` | `bunny storage download my-zone/a.png ./a.png` |
+| `bunny storage delete /old --recursive --zone=my-zone` | `bunny storage rm my-zone/old -r` |
+| `bunny storage sync ./public --zone=my-zone` | `bunny storage sync ./public my-zone/` |
+| `bunny storagezone get\|create\|update\|delete <id>` | `bunny storage zone get\|create\|update\|delete <name\|id>` |
+| `bunny pullzone list\|get\|create\|update\|delete` | `bunny cdn list\|get\|create\|update\|delete` |
+| `bunny pullzone edgerule list\|add\|delete <id>` | `bunny cdn rule list\|add\|delete <name\|id>` |
+| `bunny pullzone hostname list\|add\|remove <id>` | `bunny cdn hostname list\|add\|remove <name\|id>` |
+| `bunny dns record add 783181 A www 1.2.3.4` | `bunny dns record add example.com A www 1.2.3.4` |
+| `bunny containers app list\|delete` | `bunny containers list\|delete` |
+| `bunny scripting deploy x --file f --id 12` | `bunny scripting deploy x --file f` |
+| `bunny purge pullzone:12345` | `bunny purge --pull-zone my-site` |
+
+| 0.1.x MCP tool | 0.2.0 MCP tool |
+| --- | --- |
+| `bunny.storage_list` / `storage_delete` | `bunny.storage_ls` / `bunny.storage_rm` (`target: "zone/path"`) |
+| `bunny.zones_list` | `bunny.storage_zone_list` / `bunny.cdn_list` |
+| `bunny.zone_get` | removed (use the list tools) |
+| `bunny.zone_create` / `zone_delete` | `bunny.storage_zone_create\|delete`, `bunny.cdn_create\|delete` |
+| `bunny.pullzone_hostname_*` | `bunny.cdn_hostname_*` (`pullZone` instead of `pullZoneId`) |
+| `bunny.dns_records` | `bunny.dns_list` (`zone` instead of `zoneId`) |
+| `bunny.dns_record_set` | `bunny.dns_record_add` (`zone`, `pullZone`) |
+| `bunny.purge { target }` | `bunny.purge { urls?, pullZone?, tag? }` |
+
+---
+
 ## [0.1.1] - 2026-05-04 (Discovery polish - README + npm metadata)
 
 Doc + metadata-only release. No code changes; no behavior changes; CI surface identical.

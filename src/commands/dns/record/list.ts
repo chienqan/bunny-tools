@@ -1,38 +1,20 @@
 import type { ParsedInvocation } from '../../../manifest/types.js';
 import { listRecords, recordTypeName } from '../../../core/dns.js';
-import { renderTable } from '../../../ui/table.js';
-import { createProgress } from '../../../ui/progress.js';
+import { resolveDnsZoneId } from '../../../core/resolve.js';
+import { printList } from '../../../ui/output.js';
 
 export async function run(inv: ParsedInvocation): Promise<number> {
-  const progress = createProgress();
-  const args = inv.args as { zoneId?: string };
+  const args = inv.args as { zone: string };
   const flags = inv.flags as { type?: string; json?: boolean };
-  if (!args.zoneId) {
-    progress.fail('Usage: bunny dns:record:list <zoneId>');
-    return 1;
-  }
-  let records = await listRecords(Number.parseInt(args.zoneId, 10));
+  let records = await listRecords(await resolveDnsZoneId(args.zone));
   if (flags.type) {
-    records = records.filter((r) => recordTypeName(r.Type) === flags.type!.toUpperCase());
+    const want = flags.type.toUpperCase();
+    records = records.filter((r) => recordTypeName(r.Type) === want);
   }
-  if (flags.json) {
-    process.stdout.write(JSON.stringify(records, null, 2) + '\n');
-    return 0;
-  }
-  if (records.length === 0) {
-    process.stdout.write('(no records)\n');
-    return 0;
-  }
-  process.stdout.write(
-    renderTable(
-      records.map((r) => ({
-        id: r.Id,
-        type: recordTypeName(r.Type),
-        name: r.Name || '@',
-        value: r.Value,
-        ttl: r.Ttl ?? '-',
-      })),
-    ) + '\n',
-  );
+  printList(records, {
+    json: flags.json,
+    empty: '(no records)',
+    row: (r) => ({ id: r.Id, type: recordTypeName(r.Type), name: r.Name || '@', value: r.Value, ttl: r.Ttl ?? '-' }),
+  });
   return 0;
 }

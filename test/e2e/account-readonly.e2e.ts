@@ -22,13 +22,13 @@ describe.skipIf(!E2E_ENABLED)('e2e: account read-only smoke', () => {
     // Sanity: a few core commands must appear so a rendering regression
     // (e.g. names mode dropping output) gets caught.
     expect(names).toContain('deploy');
-    expect(names).toContain('storagezone list');
-    expect(names).toContain('pullzone list');
+    expect(names).toContain('storage zone list');
+    expect(names).toContain('cdn list');
     expect(names).toContain('manifest');
   });
 
-  it('bunny storagezone list exits 0 and renders the expected columns', async () => {
-    const r = await bunnyCli(['storagezone', 'list']);
+  it('bunny storage zone list exits 0 and renders the expected columns', async () => {
+    const r = await bunnyCli(['storage', 'zone', 'list']);
     expect(r.exitCode).toBe(0);
     // Drift smoke: the table renderer derives column names from the API
     // response shape. If Bunny renames a field, the header row changes.

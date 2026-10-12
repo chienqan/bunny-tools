@@ -198,13 +198,13 @@ async function preflightPullzoneRecord(
   if (!matched) {
     throw new ValidationError(
       `${fqdn} is not linked to pull zone "${pz.Name}" (#${pz.Id}). ` +
-        `Run: bunny pullzone hostname add ${pz.Id} ${fqdn}`,
+        `Run: bunny cdn hostname add ${pz.Name} ${fqdn}`,
     );
   }
   if (matched.HasCertificate !== true) {
     throw new ValidationError(
       `${fqdn} is linked to pull zone "${pz.Name}" (#${pz.Id}) but has no SSL certificate yet. ` +
-        `Run: bunny pullzone hostname enable-ssl ${pz.Id} ${fqdn}`,
+        `Run: bunny cdn hostname add ${pz.Name} ${fqdn} (re-running provisions the cert).`,
     );
   }
   // No conflict-with-other-records check: Bunny accepts PULLZONE alongside

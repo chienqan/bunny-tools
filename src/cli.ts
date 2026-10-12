@@ -34,7 +34,17 @@ function buildProgram(): Command {
   // (`bunny | grep deploy`) and CI scripts can detect "no command" without a
   // failure. Commander's default for no-args + has-subcommands is help on
   // stderr + exit 1, which breaks both.
+  // An unknown command (e.g. a 0.1.x name like `storagezone`) lands here too;
+  // that must fail with exit 1 so scripts notice, not print help and succeed.
   program.action(() => {
+    if (program.args.length > 0) {
+      const typed = program.args.join(' ');
+      const hint = renamedCommandHint(program.args);
+      process.stderr.write(
+        `Unknown command "${typed}".${hint ? ` ${hint}` : ''} Run \`${registry.binary} --help\` to see all commands.\n`,
+      );
+      process.exit(1);
+    }
     program.outputHelp();
     process.exit(0);
   });
@@ -65,6 +75,21 @@ function buildProgram(): Command {
   return program;
 }
 
+// Commands renamed in 0.2.0. Points users of old scripts at the new name.
+const RENAMED_GROUPS: Record<string, string> = {
+  storagezone: 'storage zone',
+  'storage-zone': 'storage zone',
+  pullzone: 'cdn',
+  'pull-zone': 'cdn',
+};
+
+function renamedCommandHint(args: string[]): string | null {
+  const [first] = args;
+  if (!first || !(first in RENAMED_GROUPS)) return null;
+  const rest = args.slice(1).join(' ').replace(/\bedge-?rule\b/, 'rule');
+  return `It was renamed: try \`${registry.binary} ${RENAMED_GROUPS[first]}${rest ? ` ${rest}` : ''}\`.`;
+}
+
 // Group metadata (description + optional aliases) keyed by space-delimited path.
 const groupMetaByPath = new Map<string, { description: string; aliases: string[] }>();
 for (const g of registry.groups ?? []) {
@@ -72,7 +97,7 @@ for (const g of registry.groups ?? []) {
 }
 
 // Walk the space-delimited name and create intermediate group commands as needed.
-// Example: "pullzone edgerule add" → pullzone (group) → edgerule (group) → add (leaf).
+// Example: "cdn rule add" → cdn (group) → rule (group) → add (leaf).
 function registerCommand(root: Command, spec: CommandSpec): void {
   const parts = spec.name.split(/\s+/).filter(Boolean);
   if (parts.length === 0) return;
@@ -91,9 +116,8 @@ function registerCommand(root: Command, spec: CommandSpec): void {
         .description(description)
         .helpOption('-h, --help', 'Show help for command.');
       // Group-level aliases. Each alias is a single segment (the alternative name
-      // for THIS group level). E.g. `pullzone` group → alias `pull-zone`.
-      // Compatibility paths like `bunny pull-zone edge-rule list` work because
-      // each group level has its own alias; Commander walks each segment.
+      // for THIS group level). Each group level has its own aliases;
+      // Commander walks each segment.
       if (meta?.aliases) {
         const seen = new Set<string>([groupName]);
         for (const alias of meta.aliases) {
@@ -146,7 +170,7 @@ function registerCommand(root: Command, spec: CommandSpec): void {
     // keeps just the positionals - the prior `slice(0, -1).filter(!= undefined)`
     // dropped only the command and let the options object leak into `args`,
     // mis-assigning it to the first positional slot when an optional arg was
-    // omitted (e.g. `bunny storage list` with no path).
+    // omitted (e.g. `bunny storage ls` with no target).
     const positional = rawArgs.slice(0, (spec.args ?? []).length);
 
     if (opts['helpJson'] === true) {
@@ -186,7 +210,8 @@ function zipArgs(spec: CommandSpec, positional: unknown[]): Record<string, unkno
   for (let i = 0; i < args.length; i++) {
     const def = args[i];
     if (!def) continue;
-    out[def.name] = def.variadic ? positional.slice(i) : positional[i];
+    // Commander hands a variadic argument over as one array in its own slot.
+    out[def.name] = def.variadic ? ((positional[i] as unknown[] | undefined) ?? []) : positional[i];
   }
   return out;
 }

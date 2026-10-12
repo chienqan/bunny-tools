@@ -1,25 +1,16 @@
 import type { ParsedInvocation } from '../../../manifest/types.js';
 import { deleteVideo } from '../../../core/stream.js';
-import { confirm, isInteractive } from '../../../ui/prompt.js';
+import { resolveLibraryId } from '../../../core/resolve.js';
 import { createProgress } from '../../../ui/progress.js';
+import { confirmDestructive, reportDone } from '../../../ui/output.js';
 
 export async function run(inv: ParsedInvocation): Promise<number> {
   const progress = createProgress();
-  const args = inv.args as { library?: string; video?: string };
-  const flags = inv.flags as { yes?: boolean };
-  if (!args.library || !args.video) {
-    progress.fail('Usage: bunny stream:video:delete <library> <videoGuid> [--yes]');
-    return 1;
-  }
-  if (!flags.yes) {
-    if (!isInteractive()) {
-      progress.fail('Pass --yes in non-interactive shells.');
-      return 1;
-    }
-    const ok = await confirm({ message: `Delete video ${args.video} from library ${args.library}?`, default: false });
-    if (!ok) return 1;
-  }
-  await deleteVideo(args.library, args.video);
-  progress.succeed(`Deleted video ${args.video}.`);
+  const args = inv.args as { library: string; video: string };
+  const flags = inv.flags as { yes?: boolean; json?: boolean };
+  const libraryId = await resolveLibraryId(args.library);
+  if (!(await confirmDestructive(progress, flags.yes, `Delete video ${args.video} from library ${args.library}?`))) return 1;
+  await deleteVideo(libraryId, args.video);
+  reportDone(progress, flags.json, { ok: true, libraryId, guid: args.video }, `Deleted video ${args.video}.`);
   return 0;
 }

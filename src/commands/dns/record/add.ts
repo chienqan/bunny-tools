@@ -1,15 +1,17 @@
 import type { ParsedInvocation } from '../../../manifest/types.js';
 import { addRecord, SUPPORTED_TYPES } from '../../../core/dns.js';
 import { getPullZone } from '../../../core/zones.js';
-import { formatBunnyError } from '../../../api/errors.js';
+import { resolveDnsZoneId, resolvePullZoneId } from '../../../core/resolve.js';
+import { formatBunnyError } from '../../../util/format-error.js';
 import { createProgress } from '../../../ui/progress.js';
+import { printJson } from '../../../ui/output.js';
 
 // Re-exported for tests; canonical implementation lives in core/dns.
 export { computeFqdn } from '../../../core/dns.js';
 
 export async function run(inv: ParsedInvocation): Promise<number> {
   const progress = createProgress();
-  const args = inv.args as { zoneId?: string; type?: string; name?: string; value?: string };
+  const args = inv.args as { zone: string; type: string; name: string; value?: string };
   const flags = inv.flags as {
     ttl?: string;
     priority?: string;
@@ -19,18 +21,16 @@ export async function run(inv: ParsedInvocation): Promise<number> {
     tag?: string;
     linkName?: string;
     pullZone?: string;
+    json?: boolean;
   };
-  if (!args.zoneId || !args.type || args.name === undefined) {
-    progress.fail(
-      `Usage: bunny dns record add <zoneId> <type> <name> <value> [flags]\nSupported types: ${SUPPORTED_TYPES.join(', ')}`,
-    );
+  const upperType = args.type.toUpperCase();
+  if (!(SUPPORTED_TYPES as readonly string[]).includes(upperType)) {
+    progress.fail(`Unsupported record type "${args.type}". Supported: ${SUPPORTED_TYPES.join(', ')}.`);
     return 1;
   }
 
-  const upperType = args.type.toUpperCase();
-
-  // Convenience: --pull-zone=<id> auto-resolves to the pull zone's name and
-  // sets LinkName=<id>. Saves users the `bunny pullzone get <id>` step for
+  // Convenience: --pull-zone=<name|id> auto-resolves to the pull zone's name and
+  // sets LinkName=<id>. Saves users the `bunny cdn get <pull-zone>` step for
   // the common "wire DNS to a pull zone" workflow. The hostname-linked +
   // cert-issued pre-flight lives in core/dns.addRecord and runs for every
   // PULLZONE record (CLI with or without this flag, MCP, etc.).
@@ -42,7 +42,7 @@ export async function run(inv: ParsedInvocation): Promise<number> {
       return 1;
     }
     try {
-      const pz = await getPullZone(Number.parseInt(flags.pullZone, 10));
+      const pz = await getPullZone(await resolvePullZoneId(flags.pullZone));
       resolvedValue = resolvedValue ?? pz.Name;
       resolvedLinkName = resolvedLinkName ?? String(pz.Id);
     } catch (err) {
@@ -52,7 +52,7 @@ export async function run(inv: ParsedInvocation): Promise<number> {
   }
 
   if (!resolvedValue) {
-    progress.fail('Missing <value>. For PULLZONE: pass the pz name or use --pull-zone=<id>.');
+    progress.fail('Missing <value>. For PULLZONE: pass the pz name or use --pull-zone <name|id>.');
     return 1;
   }
 
@@ -69,7 +69,11 @@ export async function run(inv: ParsedInvocation): Promise<number> {
     ...(resolvedLinkName ? { linkName: resolvedLinkName } : {}),
   };
   try {
-    const created = await addRecord(Number.parseInt(args.zoneId, 10), raw);
+    const created = await addRecord(await resolveDnsZoneId(args.zone), raw);
+    if (flags.json) {
+      printJson(created);
+      return 0;
+    }
     progress.succeed(`Added ${upperType} record (id=${created.Id}).`);
     // Bunny auto-spawns a hidden pull zone when the record type needs CDN
     // acceleration (notably REDIRECT). Surface that side effect so the user

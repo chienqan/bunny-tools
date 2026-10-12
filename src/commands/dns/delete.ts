@@ -1,25 +1,16 @@
 import type { ParsedInvocation } from '../../manifest/types.js';
 import { deleteZone } from '../../core/dns.js';
-import { confirm, isInteractive } from '../../ui/prompt.js';
+import { resolveDnsZoneId } from '../../core/resolve.js';
 import { createProgress } from '../../ui/progress.js';
+import { confirmDestructive, reportDone } from '../../ui/output.js';
 
 export async function run(inv: ParsedInvocation): Promise<number> {
   const progress = createProgress();
-  const args = inv.args as { id?: string };
-  const flags = inv.flags as { yes?: boolean };
-  if (!args.id) {
-    progress.fail('Usage: bunny dns:delete <id> [--yes]');
-    return 1;
-  }
-  if (!flags.yes) {
-    if (!isInteractive()) {
-      progress.fail('Pass --yes in non-interactive shells.');
-      return 1;
-    }
-    const ok = await confirm({ message: `Delete DNS zone ${args.id}? This is irreversible.`, default: false });
-    if (!ok) return 1;
-  }
-  await deleteZone(Number.parseInt(args.id, 10));
-  progress.succeed(`Deleted DNS zone ${args.id}.`);
+  const args = inv.args as { zone: string };
+  const flags = inv.flags as { yes?: boolean; json?: boolean };
+  const id = await resolveDnsZoneId(args.zone);
+  if (!(await confirmDestructive(progress, flags.yes, `Delete DNS zone ${args.zone} (id=${id}) and all its records? This is irreversible.`))) return 1;
+  await deleteZone(id);
+  reportDone(progress, flags.json, { ok: true, id }, `Deleted DNS zone ${args.zone}.`);
   return 0;
 }

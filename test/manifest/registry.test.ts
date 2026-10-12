@@ -65,7 +65,22 @@ describe('registry', () => {
     expect(findCommand('does-not-exist')).toBeUndefined();
   });
 
-  it('mcp tool list is hard-capped (≤ 12 v0.1 surface)', () => {
-    expect(listMcpTools().length).toBeLessThanOrEqual(12);
+  it('mcp annotations stay within the MCP tool cap', () => {
+    expect(listMcpTools().length).toBeLessThanOrEqual(22);
+  });
+
+  it('old 0.1.x command names are gone', () => {
+    const names = registry.commands.map((c) => c.name);
+    for (const old of ['storage list', 'storage delete', 'storagezone list', 'pullzone list', 'pullzone edgerule list', 'containers app list']) {
+      expect(names).not.toContain(old);
+    }
+  });
+
+  it('list/delete verbs carry ls/rm aliases', () => {
+    for (const c of registry.commands) {
+      const verb = c.name.split(' ').pop();
+      if (verb === 'list') expect(c.aliases, c.name).toContain('ls');
+      if (verb === 'delete' && c.name !== 'storage rm') expect(c.aliases, c.name).toContain('rm');
+    }
   });
 });

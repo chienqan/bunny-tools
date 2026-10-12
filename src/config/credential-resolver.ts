@@ -119,6 +119,10 @@ export type ResolverOverrides = {
   prompt?: (scope: AuthScope) => Promise<string>;
   keytar?: KeytarLike | null;
   profile?: string; // explicit profile override; otherwise pulls from active
+  // false = ignore the generic BUNNY_STORAGE_PASSWORD / BUNNY_STREAM_KEY, which
+  // apply to every zone/library. Callers that can fetch the exact per-zone key
+  // pass false so a generic value for zone A is never sent to zone B.
+  genericEnv?: boolean;
 };
 
 export async function getActiveProfile(): Promise<string> {
@@ -141,7 +145,13 @@ export async function resolveCredential(
   const profile = overrides.profile ?? (await getActiveProfile());
 
   // Env vars (still global; treated as targeting the active profile).
-  for (const name of scopeToEnvVars(scope)) {
+  // For storage/stream the list is [scoped, generic].
+  const envNames = scopeToEnvVars(scope);
+  const usableEnv =
+    overrides.genericEnv === false && (scope.kind === 'storage' || scope.kind === 'stream')
+      ? envNames.slice(0, 1)
+      : envNames;
+  for (const name of usableEnv) {
     const v = process.env[name];
     if (v && v.length > 0) return v;
   }

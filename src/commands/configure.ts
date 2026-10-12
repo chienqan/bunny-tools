@@ -1,5 +1,6 @@
 // `bunny configure` - interactive (or --non-interactive) credential walkthrough
-// for a named profile. Replaces the old `bunny auth set` flow.
+// for a named profile. Only the account API key is needed; zone passwords
+// and Stream library keys are fetched with it on demand.
 
 import type { ParsedInvocation } from '../manifest/types.js';
 import { runConfigure } from '../core/configure.js';
@@ -45,6 +46,7 @@ export async function run(inv: ParsedInvocation): Promise<number> {
       { interactive },
     );
     progress.succeed(`Configured profile "${result.profile}". Stored: ${result.storedScopes.join(', ')}`);
+    progress.info('Next: `bunny storage ls` (zones), `bunny cdn list` (pull zones), `bunny dns list` (DNS zones).');
     if (profile !== 'default') {
       progress.info(`Tip: \`bunny configure switch ${profile}\` to make this the active profile.`);
     }

@@ -80,6 +80,20 @@ describe('examples parse', () => {
     expect(failures).toEqual([]);
   });
 
+  it('every `bunny ...` example invokes the command it documents', () => {
+    const failures: string[] = [];
+    for (const cmd of registry.commands) {
+      for (const ex of cmd.examples ?? []) {
+        if (!ex.command.startsWith(`${registry.binary} `) && ex.command !== registry.binary) continue;
+        const invoked = ex.command.slice(registry.binary.length).trim();
+        if (invoked !== cmd.name && !invoked.startsWith(`${cmd.name} `)) {
+          failures.push(`[${cmd.name}] example runs a different command: "${ex.command}"`);
+        }
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+
   it('every example has a non-empty description', () => {
     const failures: string[] = [];
     for (const cmd of registry.commands) {
@@ -94,12 +108,12 @@ describe('examples parse', () => {
 
   // rc.51: bound summary length so the COMMANDS row in --help doesn't wrap
   // mid-description on standard terminals. Combined with the longest plausible
-  // left column (`bunny pullzone hostname add <pullZoneId> <hostname>` = 50)
+  // left column (`bunny cdn hostname add <pullZone> <hostname>` = 44)
   // plus 2-char indent + 2-char gap, a 90-char summary keeps every row under
   // 144 chars — fits comfortably in 100-col terminals (the modern floor) with
   // headroom for column shifts.
   //
-  // Original offender: `pullzone hostname add` shipped a 164-char summary
+  // Original offender: the hostname-add command shipped a 164-char summary
   // that explained the --no-force-ssl negation inline. Detail moved into
   // the leaf's flag descriptions (already documented there).
   const SUMMARY_MAX = 90;
