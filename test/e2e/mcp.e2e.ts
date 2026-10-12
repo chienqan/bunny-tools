@@ -203,7 +203,7 @@ describe.skipIf(!E2E_ENABLED)('e2e: MCP server', () => {
 
   it('bunny.dns_list returns all zones when zone omitted', async () => {
     const r = await mcp.client.callTool({ name: 'bunny.dns_list', arguments: {} });
-    const zones = unwrapJson<Array<{ Id: number; Records: unknown[] }>>(
+    const zones = unwrapJson<Array<{ Id: number; Domain: string; records: number }>>(
       r as { content?: Array<{ type: string; text?: string }> },
     );
     expect(Array.isArray(zones)).toBe(true);

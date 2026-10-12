@@ -41,7 +41,7 @@ bunny-tools is a registry-driven CLI and MCP server over Bunny.net's REST API. O
 | `src/manifest/registry.ts` | **Single source of truth**: command names, args, flags, examples, aliases, MCP mapping, group descriptions. |
 | `src/manifest/format-help.ts`, `render-help.ts` | Wrangler-style text help and JSON help, both from the registry. |
 | `src/commands/` | One file per command; the path mirrors the command (`storage zone list` → `commands/storage/zone/list.ts`). Each exports `run(inv): Promise<exitCode>`. |
-| `src/mcp/` | `server.ts` (tools + resources `bunny://manifest`, `bunny://agents`, `bunny://config/current`), `tools.ts` (21 tools). |
+| `src/mcp/` | `server.ts` (tools + resources `bunny://manifest`, `bunny://agents`, `bunny://config/current`), `tools.ts` (23 tools; list tools return compact shapes unless `full: true`). |
 | `src/core/storage-ops.ts` | `<zone>/<path>` parsing, per-zone region + credential resolution, ls/upload/download/rm/sync primitives, password stripping. |
 | `src/core/scoped-key-resolver.ts` | Storage zone password / Stream library key fallback via the account key. |
 | `src/core/resolve.ts` | Name/domain → id for pull zones, DNS zones, storage zones, libraries, scripts, container apps. |

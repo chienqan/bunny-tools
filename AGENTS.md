@@ -90,7 +90,7 @@ Setup, deploy, purge and discovery.
 - `bunny purge [urls...]` — Purge CDN cache: URLs, a whole pull zone, or one Cache-Tag. _mcp: `bunny.purge`_
 - `bunny update` — Self-update bunny-tools to the latest version on npm.
 - `bunny mcp` — Boot the bunny-tools MCP stdio server (for AI agents).
-- `bunny whoami` — Show the current account context (stored credentials + reachable zone counts).
+- `bunny whoami` — Show the current account context (stored credentials + reachable zone counts). _mcp: `bunny.whoami`_
 - `bunny docs [topic]` — Open Bunny.net docs in the browser. Optional [topic] for direct deep links.
 
 ### `bunny configure`
@@ -108,7 +108,7 @@ Files in storage zones, addressed as <zone>/<path> (ls/upload/download/rm/sync).
 
 - `bunny storage ls [target]` (alias: list) — List storage zones (no argument) or files at <zone>/<path>. _mcp: `bunny.storage_ls`_
 - `bunny storage upload <local> <target>` — Upload a local file to <zone>/<path>. _mcp: `bunny.storage_upload`_
-- `bunny storage download <target> [local]` — Download <zone>/<path> to a local file.
+- `bunny storage download <target> [local]` — Download <zone>/<path> to a local file. _mcp: `bunny.storage_download`_
 - `bunny storage rm <target>` (alias: delete) — Delete a file (or a directory with -r) at <zone>/<path>. _mcp: `bunny.storage_rm`_
 - `bunny storage sync <local> <target>` — Upload a local directory to <zone>[/<path>] (upload-only, no CDN purge).
 - `bunny storage zone list` (alias: ls) — List storage zones with id, region, size and replication. _mcp: `bunny.storage_zone_list`_

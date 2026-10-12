@@ -17,6 +17,8 @@ describe('MCP tools', () => {
     expect(names).toContain('bunny.cdn_hostname_add');
     expect(names).toContain('bunny.dns_list');
     expect(names).toContain('bunny.dns_record_add');
+    expect(names).toContain('bunny.storage_download');
+    expect(names).toContain('bunny.whoami');
     expect(names).toContain('bunny.dns_record_delete');
     expect(names).toContain('bunny.manifest');
     expect(names).toContain('bunny.init');
@@ -31,8 +33,8 @@ describe('MCP tools', () => {
     }
   });
 
-  it('hard-cap: ≤ 22 tools (~14 high-level + 4 hostname + domain_connect + init + escape hatch + buffer)', () => {
-    expect(TOOLS.length).toBeLessThanOrEqual(22);
+  it('hard-cap: ≤ 24 tools (keep the MCP surface small; bunny.run covers the long tail)', () => {
+    expect(TOOLS.length).toBeLessThanOrEqual(24);
   });
 
   it('every tool has a non-empty description', () => {

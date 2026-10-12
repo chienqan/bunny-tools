@@ -9,7 +9,7 @@ import { runDeploy } from '../core/deploy.js';
 import { resolvePurgeTargets, runPurgeTargets } from '../core/purge.js';
 import { listScopes } from '../core/auth.js';
 import { FEATURES, runInit } from '../core/init.js';
-import { listPath, listZones, deletePath, uploadFile, parseStorageTarget } from '../core/storage-ops.js';
+import { listPath, listZones, deletePath, downloadFile, uploadFile, parseStorageTarget } from '../core/storage-ops.js';
 import {
   listStorageZones,
   createStorageZone,
@@ -23,8 +23,17 @@ import {
   listPullZoneHostnames,
   enablePullZoneSSL,
   setHostnameForceSSL,
+  compactPullZone,
 } from '../core/zones.js';
-import { listZones as listDnsZones, listRecords, addRecord, deleteRecord } from '../core/dns.js';
+import {
+  listZones as listDnsZones,
+  listRecords,
+  addRecord,
+  deleteRecord,
+  summarizeDnsZone,
+  compactDnsRecord,
+} from '../core/dns.js';
+import { getAccountSummary } from '../core/whoami.js';
 import { resolveDnsZoneId, resolvePullZoneId, resolveStorageZoneId } from '../core/resolve.js';
 import { loadBunnyJson } from '../config/bunny-json.js';
 import { registry } from '../manifest/registry.js';
@@ -54,6 +63,11 @@ const PurgeInput = z.object({
 });
 const StorageLsInput = z.object({ target: z.string().optional(), recursive: z.boolean().optional() });
 const StorageUploadInput = z.object({ local: z.string(), target: z.string() });
+const StorageDownloadInput = z.object({ target: z.string(), local: z.string().optional() });
+// `full: true` returns Bunny's raw objects; the default is a compact shape that
+// keeps agent context small.
+const FullFlag = z.boolean().optional();
+const CdnListInput = z.object({ full: FullFlag });
 const StorageRmInput = z.object({ target: z.string(), recursive: z.boolean().optional() });
 const StorageZoneCreateInput = z.object({ name: z.string(), region: z.string().optional() });
 const StorageZoneRefInput = z.object({ zone: Ref });
@@ -71,7 +85,7 @@ const DomainConnectInput = z.object({
   recordName: z.string().optional(),
   noForceSSL: z.boolean().optional(),
 });
-const DnsListInput = z.object({ zone: Ref.optional() });
+const DnsListInput = z.object({ zone: Ref.optional(), full: FullFlag });
 const DnsRecordAddInput = z.object({
   zone: Ref,
   type: z.enum(RECORD_TYPES),
@@ -155,6 +169,18 @@ export const TOOLS: ToolDef[] = [
     },
   },
   {
+    name: 'bunny.storage_download',
+    description:
+      'Download a file at "<zone>/<path>" to a local path (default: the remote file name in the working directory). Returns { zone, path, local }.',
+    inputSchema: StorageDownloadInput,
+    run: async (raw) => {
+      const args = StorageDownloadInput.parse(raw);
+      const target = parseStorageTarget(args.target);
+      const local = await downloadFile(target, args.local);
+      return { zone: target.zone, path: target.path, local };
+    },
+  },
+  {
     name: 'bunny.storage_rm',
     description: 'Delete a file at "<zone>/<path>", or a whole directory with recursive=true. Zone roots are refused. Returns { deleted }.',
     inputSchema: StorageRmInput,
@@ -192,9 +218,14 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: 'bunny.cdn_list',
-    description: 'List pull zones (CDN) with their origins and hostnames.',
-    inputSchema: z.object({}),
-    run: async () => listPullZones(),
+    description:
+      'List pull zones (CDN): id, name, origin, enabled, hostnames with SSL state. Pass `full: true` for Bunny\'s raw pull zone objects.',
+    inputSchema: CdnListInput,
+    run: async (raw) => {
+      const { full } = CdnListInput.parse(raw);
+      const zones = await listPullZones();
+      return full ? zones : zones.map(compactPullZone);
+    },
   },
   {
     name: 'bunny.cdn_create',
@@ -302,12 +333,17 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: 'bunny.dns_list',
-    description: 'List DNS zones, or the records of one zone when `zone` (domain or id) is given.',
+    description:
+      'Without `zone`: DNS zones as { Id, Domain, records }. With `zone` (domain or id): that zone\'s records as { Id, type, name, value, ttl, ... } with type names (A, CNAME, PULLZONE...). Pass `full: true` for Bunny\'s raw objects.',
     inputSchema: DnsListInput,
     run: async (raw) => {
-      const { zone } = DnsListInput.parse(raw);
-      if (zone === undefined) return listDnsZones();
-      return listRecords(await resolveDnsZoneId(zone));
+      const { zone, full } = DnsListInput.parse(raw);
+      if (zone === undefined) {
+        const zones = await listDnsZones();
+        return full ? zones : zones.map(summarizeDnsZone);
+      }
+      const records = await listRecords(await resolveDnsZoneId(zone));
+      return full ? records : records.map(compactDnsRecord);
     },
   },
   {
@@ -350,6 +386,13 @@ export const TOOLS: ToolDef[] = [
       await deleteRecord(await resolveDnsZoneId(zone), recordId);
       return { ok: true };
     },
+  },
+  {
+    name: 'bunny.whoami',
+    description:
+      'Account context: stored credential scopes (masked) and how many storage zones, pull zones and DNS zones the account key reaches. Use first to check that credentials work.',
+    inputSchema: z.object({}),
+    run: async () => getAccountSummary(),
   },
   {
     name: 'bunny.manifest',

@@ -240,3 +240,27 @@ export async function enablePullZoneSSL(
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+// Compact pull zone for agent-facing output (MCP): identity, origin and
+// hostnames, without the ~100 raw configuration fields Bunny returns.
+export type CompactPullZone = {
+  Id: number;
+  Name: string;
+  OriginUrl: string | null;
+  Enabled: boolean;
+  hostnames: Array<{ host: string; ssl: boolean; forceSsl: boolean }>;
+};
+
+export function compactPullZone(z: PullZone): CompactPullZone {
+  return {
+    Id: z.Id,
+    Name: z.Name,
+    OriginUrl: z.OriginUrl,
+    Enabled: z.Enabled,
+    hostnames: (z.Hostnames ?? []).map((h) => ({
+      host: h.Value,
+      ssl: h.HasCertificate === true,
+      forceSsl: h.ForceSSL === true,
+    })),
+  };
+}

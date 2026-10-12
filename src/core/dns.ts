@@ -224,3 +224,39 @@ export async function deleteRecord(zoneId: number, recordId: number): Promise<vo
 export function recordTypeName(code: number): string {
   return Object.entries(RECORD_TYPE_CODES).find(([, v]) => v === code)?.[0] ?? `code:${code}`;
 }
+
+// Compact shapes for agent-facing output (MCP). Bunny returns ~25 fields per
+// record (geo info, monitor state, numeric type codes); agents need the few
+// that identify and describe a record.
+export type DnsZoneSummary = { Id: number; Domain: string; records: number };
+export type CompactDnsRecord = {
+  Id: number;
+  type: string;
+  name: string;
+  value: string;
+  ttl?: number;
+  priority?: number;
+  weight?: number;
+  port?: number;
+  linkName?: string;
+  disabled?: boolean;
+};
+
+export function summarizeDnsZone(z: DnsZone): DnsZoneSummary {
+  return { Id: z.Id, Domain: z.Domain, records: z.Records?.length ?? 0 };
+}
+
+export function compactDnsRecord(r: DnsRecord): CompactDnsRecord {
+  return {
+    Id: r.Id,
+    type: recordTypeName(r.Type),
+    name: r.Name || '@',
+    value: r.Value,
+    ...(r.Ttl ? { ttl: r.Ttl } : {}),
+    ...(r.Priority ? { priority: r.Priority } : {}),
+    ...(r.Weight ? { weight: r.Weight } : {}),
+    ...(r.Port ? { port: r.Port } : {}),
+    ...(r.LinkName ? { linkName: r.LinkName } : {}),
+    ...(r.Disabled ? { disabled: true } : {}),
+  };
+}
