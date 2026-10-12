@@ -1,6 +1,6 @@
 # bunny-tools/deploy-action
 
-Composite GitHub Action that wraps [`bunny-tools`](https://github.com/bytekcorp/bunny-tools) — Bunny.net deploy CLI.
+Composite GitHub Action that wraps [`bunny-tools`](https://github.com/chienqan/bunny-tools) — Bunny.net deploy CLI.
 
 ## Usage
 

@@ -33,11 +33,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bytekcorp/bunny-tools.git"
+    "url": "git+https://github.com/chienqan/bunny-tools.git"
   },
-  "homepage": "https://github.com/bytekcorp/bunny-tools#readme",
+  "homepage": "https://github.com/chienqan/bunny-tools#readme",
   "bugs": {
-    "url": "https://github.com/bytekcorp/bunny-tools/issues"
+    "url": "https://github.com/chienqan/bunny-tools/issues"
   },
   "files": [
     "dist",

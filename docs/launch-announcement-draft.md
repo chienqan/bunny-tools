@@ -18,7 +18,7 @@ Recommended first venue. Smaller audience, friendlier feedback, Bunny employees 
 > Covers Storage + CDN + DNS + Stream + Edge Scripting + Magic Containers (basic). 60 commands, 19 MCP tools, nightly drift detection against a real account so Bunny API changes get caught before they break my deploys.
 >
 > npm: https://www.npmjs.com/package/bunny-tools
-> GitHub: https://github.com/bytekcorp/bunny-tools
+> GitHub: https://github.com/chienqan/bunny-tools
 >
 > Would love feedback from anyone using Bunny in production - especially edge cases I haven't hit. License is MIT.
 
@@ -46,7 +46,7 @@ Recommended first venue. Smaller audience, friendlier feedback, Bunny employees 
 > - Real production deploy on a Framer-export site (~57 files, edge rules, custom hostname, www→apex redirect - all working)
 >
 > npm: https://www.npmjs.com/package/bunny-tools
-> GitHub: https://github.com/bytekcorp/bunny-tools (MIT)
+> GitHub: https://github.com/chienqan/bunny-tools (MIT)
 >
 > Welcome feedback / bug reports / feature requests - especially from anyone running Bunny in production with constraints I haven't thought about.
 
@@ -69,7 +69,7 @@ Recommended first venue. Smaller audience, friendlier feedback, Bunny employees 
 
 > **(3/3)** verified against a real bunny account with nightly drift detection - when bunny changes a field name under the API, the suite turns red within 24h and I get a github issue.
 >
-> https://github.com/bytekcorp/bunny-tools
+> https://github.com/chienqan/bunny-tools
 
 ---
 

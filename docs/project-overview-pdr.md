@@ -8,7 +8,7 @@
 **Package:** `bunny-tools` (npm)  
 **Binary:** `bunny`  
 **License:** MIT  
-**Repository:** `bytekcorp/bunny-tools`
+**Repository:** `chienqan/bunny-tools`
 
 ---
 
@@ -206,4 +206,4 @@ All shipped same project (no split); 129 unit tests + 44 e2e tests passing; 51 a
 
 **Project Lead:** chien  
 **Initial Commit:** 2026-05-02  
-**Repo:** https://github.com/bytekcorp/bunny-tools
+**Repo:** https://github.com/chienqan/bunny-tools

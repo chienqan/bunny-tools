@@ -2,8 +2,8 @@
 
 [![npm](https://img.shields.io/npm/v/bunny-tools.svg)](https://www.npmjs.com/package/bunny-tools)
 [![npm downloads](https://img.shields.io/npm/dm/bunny-tools.svg)](https://www.npmjs.com/package/bunny-tools)
-[![CI](https://github.com/bytekcorp/bunny-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/bytekcorp/bunny-tools/actions/workflows/ci.yml)
-[![e2e nightly](https://github.com/bytekcorp/bunny-tools/actions/workflows/e2e-nightly.yml/badge.svg)](https://github.com/bytekcorp/bunny-tools/actions/workflows/e2e-nightly.yml)
+[![CI](https://github.com/chienqan/bunny-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/chienqan/bunny-tools/actions/workflows/ci.yml)
+[![e2e nightly](https://github.com/chienqan/bunny-tools/actions/workflows/e2e-nightly.yml/badge.svg)](https://github.com/chienqan/bunny-tools/actions/workflows/e2e-nightly.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **Package:** `bunny-tools` &middot; **Binary:** `bunny` &middot; **Node:** ≥20
@@ -306,7 +306,7 @@ AI agents should start with [`AGENTS.md`](./AGENTS.md): workflows, output contra
 ## Development
 
 ```bash
-git clone https://github.com/bytekcorp/bunny-tools
+git clone https://github.com/chienqan/bunny-tools
 cd bunny-tools
 npm ci
 npm run build
