@@ -73,7 +73,7 @@ bunny-tools v0.1.0-rc.26 ships all **55 commands** live on npm (latest & alpha d
 
 **Tech Stack Locked:**
 - Node 20+, TypeScript, Commander.js
-- undici (HTTP), zod (validation), keytar (keychain)
+- undici (HTTP), zod (validation), @napi-rs/keyring (keychain)
 - Vitest + Nock (testing)
 - esbuild (bundling)
 
@@ -385,7 +385,7 @@ Phases 2–4, 6–7 completed. Phase 5 deferred to v0.2.
 |------|-----------|--------|-----------|
 | Bunny API changes mid-phase | Low | Medium | Weekly API check; vendor API responses in tests |
 | Rate limit (429) tuning | Medium | Low | Default concurrency 8; document tuning; configurable |
-| keytar native build fails | Medium | Low | Graceful fallback to file; wrap in try/catch |
+| Keychain native module unavailable | Low | Low | Prebuilt @napi-rs/keyring binaries; graceful fallback to file |
 | npm name `bunny-tools` taken | Medium | High | Verify before phase 2 publish; fallback `@bytekcorp/bunny-tools` |
 | Slip gate triggers; scope grows | High | High | **Strict phase gating:** no phase starts until prior ships. Phase 5 explicitly demotable. |
 | GH Action marketplace approval | Low | Low | Composite action (no build pipeline); pre-approve with GH Team |
@@ -427,7 +427,7 @@ Phases 2–4, 6–7 completed. Phase 5 deferred to v0.2.
 ## Key Decisions Locked In
 
 ✅ **Architecture:** Registry-driven CLI + core + api layers  
-✅ **Tech Stack:** Node 20+, TS, Commander, undici, zod, keytar  
+✅ **Tech Stack:** Node 20+, TS, Commander, undici, zod, @napi-rs/keyring  
 ✅ **Auth Model:** Honest 4-key; explicit credential scope per call  
 ✅ **Pagination:** Always page=1, perPage=1000 (avoid Bunny footgun)  
 ✅ **Retry:** 429/5xx exponential backoff + Retry-After honor, max 5 attempts  

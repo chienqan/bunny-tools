@@ -4,6 +4,14 @@ All notable changes to bunny-tools are documented here. This changelog follows [
 
 ---
 
+## [0.2.2] - 2026-10-12
+
+### Changed
+- **OS keychain access moved from `keytar` to `@napi-rs/keyring`.** `keytar` is archived and needed an install script (`prebuild-install`, itself deprecated) to fetch its native binary. Recent npm blocks such scripts by default, so `npm install -g bunny-tools` printed `allow-scripts` and `deprecated` warnings, and fresh installs could silently fall back to file storage. `@napi-rs/keyring` ships prebuilt binaries per platform with no install script. On macOS it reads and writes the same keychain items (service `bunny-tools`, account `<profile>:<scope>`), so keys stored by earlier versions keep working; this was verified against an existing keytar-written entry. The install drops `keytar` and its 31 transitive packages.
+- Unit tests never touch the developer's real OS keychain (mocked globally in `test/setup.ts`).
+
+---
+
 ## [0.2.1] - 2026-10-12
 
 ### Changed

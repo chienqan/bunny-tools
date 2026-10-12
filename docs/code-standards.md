@@ -235,7 +235,7 @@ Controlled via `LOG_LEVEL` environment variable:
 | `error` (default) | Errors only | Production |
 | `warn` | Errors + warnings | Debugging rate limits, auth issues |
 | `info` | Errors + info | Normal user operation (not used in P1) |
-| `debug` | All | Development, troubleshooting keytar fallback |
+| `debug` | All | Development, troubleshooting OS keychain fallback |
 
 ### Credential Handling
 

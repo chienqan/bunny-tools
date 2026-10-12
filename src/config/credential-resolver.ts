@@ -15,19 +15,27 @@ import type { AuthScope } from '../api/http.js';
 const KEYCHAIN_SERVICE = 'bunny-tools';
 const DEFAULT_PROFILE = 'default';
 
-async function loadKeytar(): Promise<KeytarLike | null> {
+// OS keychain access via @napi-rs/keyring (prebuilt binaries, no install
+// scripts). On macOS it reads and writes the same generic-password items
+// (service "bunny-tools", account "<profile>:<scope>") that keytar used before
+// 0.2.2, so existing stored keys keep resolving. Returns null when the native
+// module is unavailable; callers then fall back to the credentials file.
+async function loadKeychain(): Promise<KeychainLike | null> {
   try {
-    const mod = await import('keytar');
-    const keytar =
-      (mod as unknown as { default?: KeytarLike }).default ?? (mod as unknown as KeytarLike);
-    return keytar;
+    const { AsyncEntry, findCredentialsAsync } = await import('@napi-rs/keyring');
+    return {
+      getPassword: async (service, account) => (await new AsyncEntry(service, account).getPassword()) ?? null,
+      setPassword: (service, account, value) => new AsyncEntry(service, account).setPassword(value),
+      deletePassword: (service, account) => new AsyncEntry(service, account).deleteCredential(),
+      findCredentials: (service) => findCredentialsAsync(service),
+    };
   } catch (err) {
-    logger.debug(`keytar unavailable; falling back to file storage: ${(err as Error).message}`);
+    logger.debug(`OS keychain unavailable; falling back to file storage: ${(err as Error).message}`);
     return null;
   }
 }
 
-type KeytarLike = {
+export type KeychainLike = {
   setPassword: (service: string, account: string, value: string) => Promise<void>;
   getPassword: (service: string, account: string) => Promise<string | null>;
   deletePassword: (service: string, account: string) => Promise<boolean>;
@@ -117,7 +125,7 @@ async function writeFileStore(store: FileStore): Promise<void> {
 export type ResolverOverrides = {
   flag?: string;
   prompt?: (scope: AuthScope) => Promise<string>;
-  keytar?: KeytarLike | null;
+  keychain?: KeychainLike | null;
   profile?: string; // explicit profile override; otherwise pulls from active
   // false = ignore the generic BUNNY_STORAGE_PASSWORD / BUNNY_STREAM_KEY, which
   // apply to every zone/library. Callers that can fetch the exact per-zone key
@@ -158,13 +166,13 @@ export async function resolveCredential(
 
   // Keychain. Try `<profile>:<scope>` first; for the default profile, fall back
   // to bare `<scope>` so rc.8-era keychain entries still resolve.
-  const keytar = overrides.keytar !== undefined ? overrides.keytar : await loadKeytar();
-  if (keytar) {
+  const keychain = overrides.keychain !== undefined ? overrides.keychain : await loadKeychain();
+  if (keychain) {
     try {
-      const v = await keytar.getPassword(KEYCHAIN_SERVICE, keychainAccount(profile, scope));
+      const v = await keychain.getPassword(KEYCHAIN_SERVICE, keychainAccount(profile, scope));
       if (v && v.length > 0) return v;
       if (profile === DEFAULT_PROFILE) {
-        const legacy = await keytar.getPassword(KEYCHAIN_SERVICE, scopeToAccount(scope));
+        const legacy = await keychain.getPassword(KEYCHAIN_SERVICE, scopeToAccount(scope));
         if (legacy && legacy.length > 0) return legacy;
       }
     } catch (err) {
@@ -194,13 +202,13 @@ export async function resolveCredential(
 export async function setCredential(
   scope: AuthScope,
   value: string,
-  overrides: { keytar?: KeytarLike | null; profile?: string } = {},
+  overrides: { keychain?: KeychainLike | null; profile?: string } = {},
 ): Promise<{ storedIn: 'keychain' | 'file'; profile: string }> {
   const profile = overrides.profile ?? (await getActiveProfile());
-  const keytar = overrides.keytar !== undefined ? overrides.keytar : await loadKeytar();
-  if (keytar) {
+  const keychain = overrides.keychain !== undefined ? overrides.keychain : await loadKeychain();
+  if (keychain) {
     try {
-      await keytar.setPassword(KEYCHAIN_SERVICE, keychainAccount(profile, scope), value);
+      await keychain.setPassword(KEYCHAIN_SERVICE, keychainAccount(profile, scope), value);
       return { storedIn: 'keychain', profile };
     } catch (err) {
       logger.debug(`keychain write failed; falling back to file: ${(err as Error).message}`);
@@ -215,16 +223,16 @@ export async function setCredential(
 
 export async function clearCredential(
   scope: AuthScope,
-  overrides: { keytar?: KeytarLike | null; profile?: string } = {},
+  overrides: { keychain?: KeychainLike | null; profile?: string } = {},
 ): Promise<void> {
   const profile = overrides.profile ?? (await getActiveProfile());
-  const keytar = overrides.keytar !== undefined ? overrides.keytar : await loadKeytar();
-  if (keytar) {
+  const keychain = overrides.keychain !== undefined ? overrides.keychain : await loadKeychain();
+  if (keychain) {
     try {
-      await keytar.deletePassword(KEYCHAIN_SERVICE, keychainAccount(profile, scope));
+      await keychain.deletePassword(KEYCHAIN_SERVICE, keychainAccount(profile, scope));
       // Also clear the legacy bare entry for the default profile.
       if (profile === DEFAULT_PROFILE) {
-        await keytar.deletePassword(KEYCHAIN_SERVICE, scopeToAccount(scope));
+        await keychain.deletePassword(KEYCHAIN_SERVICE, scopeToAccount(scope));
       }
     } catch (err) {
       logger.debug(`keychain delete failed: ${(err as Error).message}`);
@@ -254,7 +262,7 @@ export async function setActiveProfile(name: string): Promise<void> {
 
 export async function removeProfile(
   name: string,
-  overrides: { keytar?: KeytarLike | null } = {},
+  overrides: { keychain?: KeychainLike | null } = {},
 ): Promise<void> {
   const store = await readFileStore();
   const profileBag = store.profiles[name];
@@ -262,13 +270,13 @@ export async function removeProfile(
     throw new AuthError(`Profile "${name}" not found.`);
   }
   // Clean up keychain entries for this profile.
-  const keytar = overrides.keytar !== undefined ? overrides.keytar : await loadKeytar();
-  if (keytar) {
+  const keychain = overrides.keychain !== undefined ? overrides.keychain : await loadKeychain();
+  if (keychain) {
     try {
-      const creds = await keytar.findCredentials(KEYCHAIN_SERVICE);
+      const creds = await keychain.findCredentials(KEYCHAIN_SERVICE);
       for (const c of creds) {
         if (c.account.startsWith(`${name}:`)) {
-          await keytar.deletePassword(KEYCHAIN_SERVICE, c.account);
+          await keychain.deletePassword(KEYCHAIN_SERVICE, c.account);
         }
       }
     } catch (err) {
@@ -288,16 +296,16 @@ export function maskCredential(value: string): string {
 // List scopes stored within a single profile (file + keychain merged).
 export async function listScopesInProfile(
   profile: string,
-  overrides: { keytar?: KeytarLike | null } = {},
+  overrides: { keychain?: KeychainLike | null } = {},
 ): Promise<string[]> {
   const found = new Set<string>();
   const store = await readFileStore();
   const bag = store.profiles[profile];
   if (bag) for (const k of Object.keys(bag)) found.add(k);
-  const keytar = overrides.keytar !== undefined ? overrides.keytar : await loadKeytar();
-  if (keytar) {
+  const keychain = overrides.keychain !== undefined ? overrides.keychain : await loadKeychain();
+  if (keychain) {
     try {
-      const creds = await keytar.findCredentials(KEYCHAIN_SERVICE);
+      const creds = await keychain.findCredentials(KEYCHAIN_SERVICE);
       const prefix = `${profile}:`;
       for (const c of creds) {
         if (c.account.startsWith(prefix)) {
@@ -317,7 +325,7 @@ export async function listScopesInProfile(
 // Backwards-compat shim for code still calling listCredentialScopes() - returns
 // the active profile's scopes, prefixed with `<profile>:` for clarity.
 export async function listCredentialScopes(
-  overrides: { keytar?: KeytarLike | null } = {},
+  overrides: { keychain?: KeychainLike | null } = {},
 ): Promise<string[]> {
   const profile = await getActiveProfile();
   const scopes = await listScopesInProfile(profile, overrides);
