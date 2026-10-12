@@ -330,6 +330,8 @@ export function regionCodeToSubdomain(code: string): string {
 }
 
 export function storageBaseUrl(region: string): string {
+  // The region becomes a hostname label; refuse anything that could change the host.
+  if (region.length > 0 && !/^[a-z]{2,4}$/.test(region)) throw new Error(`Invalid storage region "${region}".`);
   const sub = region.length > 0 ? `${region}.` : '';
   return `https://${sub}storage.bunnycdn.com`;
 }

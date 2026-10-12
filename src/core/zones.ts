@@ -42,8 +42,12 @@ export async function createStorageZone(input: StorageZoneCreateInput): Promise<
   return toPublicZone(created);
 }
 
+// Bunny answers `POST /storagezone/{id}` with 204 No Content, so re-fetch to
+// return the updated zone.
 export async function updateStorageZone(id: number, body: Record<string, unknown>): Promise<PublicStorageZone> {
-  return toPublicZone(await client().updateStorageZone(id, body));
+  const c = client();
+  await c.updateStorageZone(id, body);
+  return toPublicZone(await c.getStorageZone(id));
 }
 
 export async function deleteStorageZone(id: number): Promise<void> {

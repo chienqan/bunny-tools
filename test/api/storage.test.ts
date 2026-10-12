@@ -65,6 +65,21 @@ describe('createStorageClient.listDir', () => {
   });
 });
 
+describe('createStorageClient path encoding', () => {
+  it('percent-encodes each segment so # ? % stay in the file name', async () => {
+    getMockAgent()
+      .get(PROD_HOST)
+      .intercept({ path: '/myzone/a%23b%3F%25.txt', method: 'DELETE' })
+      .reply(200, '');
+    await expect(buildClient().deleteFile('myzone', '', '/a#b?%.txt')).resolves.toBeUndefined();
+  });
+
+  it('refuses dot segments that URL parsing would resolve to a parent', async () => {
+    await expect(buildClient().deleteFile('myzone', '', '/a/..')).rejects.toThrowError(/segment/);
+    await expect(buildClient().listDir('myzone', '', '/..')).rejects.toThrowError(/segment/);
+  });
+});
+
 describe('listRecursive', () => {
   it('walks subdirectories into a flat file list', async () => {
     const pool = getMockAgent().get(PROD_HOST);

@@ -41,6 +41,17 @@ describe('parseStorageTarget', () => {
     expect(parseStorageTarget('/my-zone//a//b.txt')).toEqual({ zone: 'my-zone', path: '/a/b.txt', isDir: false });
   });
 
+  it.each(['my-zone/.', 'my-zone/a/..', 'my-zone/./x', '../my-zone'])('rejects dot segments: %s', (raw) => {
+    expect(() => parseStorageTarget(raw)).toThrowError(/"\." or "\.\." segments/);
+  });
+
+  it.each(['my-zone/#', 'my-zone/img/#draft.png', 'my-zone/a?.png', 'my-zone\\a'])(
+    'rejects characters URL parsing would reinterpret: %s',
+    (raw) => {
+      expect(() => parseStorageTarget(raw)).toThrowError(/cannot contain/);
+    },
+  );
+
   it('rejects an empty target with a hint', () => {
     expect(() => parseStorageTarget('  ')).toThrowError(/bunny storage ls/);
   });
@@ -120,6 +131,76 @@ describe('storage ops with only an account key', () => {
 
   it('refuses to delete a zone root', async () => {
     await expect(deletePath(parseStorageTarget('my-zone'))).rejects.toThrowError(/storage zone delete/);
+  });
+
+  it('refuses a plain delete of a trailing-slash directory without -r', async () => {
+    getMockAgent()
+      .get('https://api.bunny.net')
+      .intercept({ path: /\/storagezone.*/, method: 'GET' })
+      .reply(200, { Items: [ZONE], HasMoreItems: false });
+    await expect(deletePath(parseStorageTarget('my-zone/img/'))).rejects.toThrowError(/Pass -r/);
+  });
+
+  it('refuses a plain delete when the path is a directory in its parent listing', async () => {
+    const agent = getMockAgent();
+    agent
+      .get('https://api.bunny.net')
+      .intercept({ path: /\/storagezone.*/, method: 'GET' })
+      .reply(200, { Items: [ZONE], HasMoreItems: false });
+    agent
+      .get('https://sg.storage.bunnycdn.com')
+      .intercept({ path: '/my-zone/', method: 'GET' })
+      .reply(200, [{ Guid: 'g', ObjectName: 'img', Path: '/my-zone/', Length: 0, IsDirectory: true, LastChanged: '' }]);
+    await expect(deletePath(parseStorageTarget('my-zone/img'))).rejects.toThrowError(/is a directory/);
+  });
+
+  it('deletes a single file after confirming it is not a directory', async () => {
+    const agent = getMockAgent();
+    agent
+      .get('https://api.bunny.net')
+      .intercept({ path: /\/storagezone.*/, method: 'GET' })
+      .reply(200, { Items: [ZONE], HasMoreItems: false });
+    const storage = agent.get('https://sg.storage.bunnycdn.com');
+    storage
+      .intercept({ path: '/my-zone/img/', method: 'GET' })
+      .reply(200, [{ Guid: 'g', ObjectName: 'a b.png', Path: '/my-zone/img/', Length: 3, IsDirectory: false, LastChanged: '' }]);
+    storage.intercept({ path: '/my-zone/img/a%20b.png', method: 'DELETE' }).reply(200, '');
+    expect(await deletePath(parseStorageTarget('my-zone/img/a b.png'))).toBe(1);
+  });
+
+  it('rejects a region that is not a plain region code', async () => {
+    await expect(listPath(parseStorageTarget('my-zone'), { region: 'evil.example/' })).rejects.toThrowError(/Invalid storage region/);
+  });
+
+  it('a generic BUNNY_STORAGE_PASSWORD does not override the fetched zone password', async () => {
+    process.env['BUNNY_STORAGE_PASSWORD'] = 'other-zone-secret';
+    const agent = getMockAgent();
+    agent
+      .get('https://api.bunny.net')
+      .intercept({ path: /\/storagezone.*/, method: 'GET' })
+      .reply(200, { Items: [ZONE], HasMoreItems: false });
+    agent
+      .get('https://sg.storage.bunnycdn.com')
+      .intercept({ path: '/my-zone/', method: 'GET', headers: withAccessKey('zone-secret') })
+      .reply(200, []);
+    expect(await listPath(parseStorageTarget('my-zone'))).toEqual([]);
+  });
+
+  it('falls back to the generic BUNNY_STORAGE_PASSWORD when the zone password cannot be fetched', async () => {
+    // CI shape: a zone-scoped password but no usable account key. The account
+    // lookup answering 401 stands in for "no account key" without depending on
+    // whatever is in the developer's OS keychain.
+    process.env['BUNNY_STORAGE_PASSWORD'] = 'ci-secret';
+    const agent = getMockAgent();
+    agent
+      .get('https://api.bunny.net')
+      .intercept({ path: /\/storagezone.*/, method: 'GET' })
+      .reply(401, { Message: 'Unauthorized' });
+    agent
+      .get('https://sg.storage.bunnycdn.com')
+      .intercept({ path: '/my-zone/', method: 'GET', headers: withAccessKey('ci-secret') })
+      .reply(200, []);
+    expect(await listPath(parseStorageTarget('my-zone'), { region: 'sg' })).toEqual([]);
   });
 });
 

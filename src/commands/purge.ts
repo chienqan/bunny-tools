@@ -34,13 +34,14 @@ export async function run(inv: ParsedInvocation): Promise<number> {
   }
 
   const result = await runPurgeTargets(targets);
+  // Any failed target is a (partial) failure: exit 2, per the output contract.
   if (flags.json) {
     printJson(result);
-    return result.failed.length > 0 && result.ok === 0 ? 2 : 0;
+    return result.failed.length > 0 ? 2 : 0;
   }
   for (const f of result.failed) progress.warn(`${f.target}: ${f.error}`);
-  if (result.failed.length > 0 && result.ok === 0) {
-    progress.fail('Purge failed.');
+  if (result.failed.length > 0) {
+    progress.fail(result.ok === 0 ? 'Purge failed.' : `Purge partly failed (${result.failed.length} of ${result.ok + result.failed.length}).`);
     return 2;
   }
   progress.succeed(`Purged ${result.ok} target(s).`);

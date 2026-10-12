@@ -107,7 +107,7 @@ Store your Bunny API key and manage credential profiles.
 Files in storage zones, addressed as <zone>/<path> (ls/upload/download/rm/sync).
 
 - `bunny storage ls [target]` (alias: list) — List storage zones (no argument) or files at <zone>/<path>. _mcp: `bunny.storage_ls`_
-- `bunny storage upload <local> <target>` — Upload a local file to <zone>/<path>.
+- `bunny storage upload <local> <target>` — Upload a local file to <zone>/<path>. _mcp: `bunny.storage_upload`_
 - `bunny storage download <target> [local]` — Download <zone>/<path> to a local file.
 - `bunny storage rm <target>` (alias: delete) — Delete a file (or a directory with -r) at <zone>/<path>. _mcp: `bunny.storage_rm`_
 - `bunny storage sync <local> <target>` — Upload a local directory to <zone>[/<path>] (upload-only, no CDN purge).
@@ -121,17 +121,17 @@ Files in storage zones, addressed as <zone>/<path> (ls/upload/download/rm/sync).
 
 Pull zones (CDN): create/list/delete, edge rules, custom hostnames.
 
-- `bunny cdn list` (alias: ls) — List pull zones.
+- `bunny cdn list` (alias: ls) — List pull zones. _mcp: `bunny.cdn_list`_
 - `bunny cdn get <pullZone>` — Show one pull zone as JSON.
-- `bunny cdn create <name>` — Create a pull zone in front of an origin URL.
+- `bunny cdn create <name>` — Create a pull zone in front of an origin URL. _mcp: `bunny.cdn_create`_
 - `bunny cdn update <pullZone>` — Update a pull zone with a raw JSON body.
-- `bunny cdn delete <pullZone>` (alias: rm) — Delete a pull zone.
+- `bunny cdn delete <pullZone>` (alias: rm) — Delete a pull zone. _mcp: `bunny.cdn_delete`_
 - `bunny cdn rule list <pullZone>` (alias: ls) — List edge rules on a pull zone.
 - `bunny cdn rule add <pullZone>` — Add or update an edge rule (raw JSON rule; include Guid to update).
 - `bunny cdn rule delete <pullZone> <guid>` (alias: rm) — Delete an edge rule by Guid.
 - `bunny cdn hostname list <pullZone>` (alias: ls) — List custom hostnames linked to a pull zone. _mcp: `bunny.cdn_hostname_list`_
 - `bunny cdn hostname add <pullZone> <hostname>` — Link a hostname, provision a Let's Encrypt cert and enable ForceSSL. Idempotent. _mcp: `bunny.cdn_hostname_add`_
-- `bunny cdn hostname remove <pullZone> <hostname>` (alias: rm) — Unlink a custom hostname from a pull zone.
+- `bunny cdn hostname remove <pullZone> <hostname>` (alias: rm) — Unlink a custom hostname from a pull zone. _mcp: `bunny.cdn_hostname_remove`_
 
 ### `bunny domain`
 

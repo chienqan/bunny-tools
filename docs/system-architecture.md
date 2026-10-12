@@ -62,7 +62,7 @@ bunny <resource> [<sub-resource>] <verb> [args] [flags]
 
 - **Verbs:** `list` (alias `ls`), `get`, `create`, `update`, `delete` (alias `rm`). Storage file commands are `ls`, `upload`, `download`, `rm`, `sync`. Hostnames use `add`/`remove` (link/unlink).
 - **References:** pull zones, storage zones, libraries, scripts and apps accept a name or id (`core/resolve.ts`); DNS zones accept a domain or id. Numeric refs skip the lookup request.
-- **Storage addressing:** `<zone>/<path>`; a trailing slash means "directory" (upload keeps the local file name).
+- **Storage addressing:** `<zone>/<path>`; a trailing slash means "directory" (upload keeps the local file name). `.`/`..` segments and `?`, `#`, `\` are rejected (URL parsing would retarget them at a parent directory), every segment is percent-encoded in `api/storage.ts`, and deleting a directory requires `-r`. Region codes are validated before they become a hostname label.
 - **Output:** stdout is the result only. `--json` on every command that prints a result. Progress and human success lines go to stderr (`src/ui/progress.ts`).
 - **Exit codes:** `0` ok · `1` error, bad input, aborted · `2` partial failure (deploy, sync, purge).
 - **Destructive commands:** `confirmDestructive()`; `--yes`/`-y` required when not interactive (`BUNNY_NONINTERACTIVE=1` forces that).
@@ -79,7 +79,9 @@ Four scopes, all sent as the `AccessKey` header: `account`, `storage:<zone>`, `s
        → OS keychain "<profile>:<scope>" → ~/.config/bunny-tools/credentials.json
 ```
 
-`core/scoped-key-resolver.ts` wraps that for `storage` and `stream` scopes: when nothing is stored, it fetches the zone `Password` (`GET /storagezone`) or library `ApiKey` (`GET /videolibrary/{id}`) with the account key, memoizes it in process memory, and never writes it to disk. `core/storage-ops.ts` reuses the zone metadata it already fetched for the region, so a storage command makes one account call plus the storage calls.
+Callers pass `{ genericEnv: false }` when they can fetch the exact per-zone key, so the generic variable (one value for every zone) is consulted only as a last resort.
+
+`core/scoped-key-resolver.ts` wraps that for `storage` and `stream` scopes: stored key for that exact zone/library → fetched with the account key → generic env var. When nothing zone-specific is stored, it fetches the zone `Password` (`GET /storagezone`) or library `ApiKey` (`GET /videolibrary/{id}`) with the account key, memoizes it in process memory, and never writes it to disk. `core/storage-ops.ts` reuses the zone metadata it already fetched for the region, so a storage command makes one account call plus the storage calls.
 
 Active profile: `--profile` / `-p` → `BUNNY_PROFILE` → `active` in the credentials file → `default`.
 

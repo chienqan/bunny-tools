@@ -639,7 +639,10 @@
           "description": "Upload into a directory, keeping the name."
         }
       ],
-      "mcp": null
+      "mcp": {
+        "tool": "bunny.storage_upload",
+        "description": null
+      }
     },
     {
       "name": "storage download",
@@ -995,7 +998,10 @@
         }
       ],
       "examples": [],
-      "mcp": null
+      "mcp": {
+        "tool": "bunny.cdn_list",
+        "description": null
+      }
     },
     {
       "name": "cdn get",
@@ -1053,7 +1059,10 @@
           "description": "New pull zone."
         }
       ],
-      "mcp": null
+      "mcp": {
+        "tool": "bunny.cdn_create",
+        "description": null
+      }
     },
     {
       "name": "cdn update",
@@ -1123,7 +1132,10 @@
         }
       ],
       "examples": [],
-      "mcp": null
+      "mcp": {
+        "tool": "bunny.cdn_delete",
+        "description": null
+      }
     },
     {
       "name": "cdn rule list",
@@ -1213,6 +1225,14 @@
         }
       ],
       "flags": [
+        {
+          "name": "yes",
+          "short": "y",
+          "description": "Skip confirmation.",
+          "hasValue": false,
+          "valueHint": null,
+          "defaultValue": null
+        },
         {
           "name": "json",
           "short": null,
@@ -1338,6 +1358,14 @@
       ],
       "flags": [
         {
+          "name": "yes",
+          "short": "y",
+          "description": "Skip confirmation.",
+          "hasValue": false,
+          "valueHint": null,
+          "defaultValue": null
+        },
+        {
           "name": "json",
           "short": null,
           "description": "Emit JSON result.",
@@ -1347,7 +1375,10 @@
         }
       ],
       "examples": [],
-      "mcp": null
+      "mcp": {
+        "tool": "bunny.cdn_hostname_remove",
+        "description": null
+      }
     },
     {
       "name": "domain connect",

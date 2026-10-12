@@ -26,10 +26,21 @@ export type StorageTarget = {
 
 // Parse `my-zone`, `my-zone/`, `my-zone/a/b.txt`, `/my-zone/a/`. The first
 // segment is always the zone name.
+//
+// `.`/`..` segments and `?`, `#`, `\` are rejected: URL construction would
+// normalize or truncate them (`my-zone/a/..` → `/my-zone/`, `my-zone/img/#x` →
+// `/my-zone/img/`), silently retargeting a delete at a parent directory or the
+// zone root.
 export function parseStorageTarget(raw: string): StorageTarget {
   const trimmed = raw.trim().replace(/^\/+/, '');
   if (trimmed.length === 0) {
     throw new ValidationError('Expected <zone>/<path>, e.g. `my-zone/assets/logo.png`. Run `bunny storage ls` to see zones.');
+  }
+  if (/[?#\\]/.test(trimmed)) {
+    throw new ValidationError(`Storage paths cannot contain "?", "#" or "\\": "${raw}".`);
+  }
+  if (trimmed.split('/').some((seg) => seg === '.' || seg === '..')) {
+    throw new ValidationError(`Storage paths cannot contain "." or ".." segments: "${raw}".`);
   }
   const slash = trimmed.indexOf('/');
   const zone = slash === -1 ? trimmed : trimmed.slice(0, slash);
@@ -60,6 +71,7 @@ export async function listZones(): Promise<PublicStorageZone[]> {
 // Resolve region + credential for one zone. `region` skips the account lookup
 // (useful in CI where only BUNNY_STORAGE_PASSWORD is set).
 async function openZone(zone: string, region?: string): Promise<ZoneHandle> {
+  if (region !== undefined) assertStorageRegion(region);
   let meta: StorageZone | undefined;
   if (region === undefined) {
     meta = await accountClient().getStorageZoneByName(zone);
@@ -68,8 +80,9 @@ async function openZone(zone: string, region?: string): Promise<ZoneHandle> {
   const knownPassword = meta?.Password;
   const resolver = async (scope: AuthScope): Promise<string> => {
     if (scope.kind === 'storage' && knownPassword) {
-      // Stored scoped key still wins over the fetched one.
-      return resolveCredential(scope).catch(() => knownPassword);
+      // A key stored for this exact zone wins; the generic env var does not
+      // (it would be another zone's password).
+      return resolveCredential(scope, { genericEnv: false }).catch(() => knownPassword);
     }
     return resolveScopedCredential(scope);
   };
@@ -146,10 +159,33 @@ export async function deletePath(
   }
   const h = await openZone(target.zone, opts.region);
   if (!opts.recursive) {
+    // Bunny deletes directories recursively, so a plain delete of a directory
+    // would remove everything under it. Require -r for that.
+    if (target.isDir || (await isDirectory(h, target.path))) {
+      throw new ValidationError(
+        `"${target.zone}${target.path}" is a directory. Pass -r to delete it and everything under it.`,
+      );
+    }
     await h.client.deleteFile(h.zone, h.region, target.path);
     return 1;
   }
   const items = await listRecursive(h.client, h.zone, h.region, target.path);
   for (const i of items) await h.client.deleteFile(h.zone, h.region, i.path);
   return items.length;
+}
+
+// True when `path` names a directory entry in its parent listing.
+async function isDirectory(h: ZoneHandle, path: string): Promise<boolean> {
+  const name = basename(path);
+  const parent = dirname(path);
+  const entries = await h.client.listDir(h.zone, h.region, parent === '.' ? '/' : parent);
+  return entries.some((e) => e.ObjectName === name && e.IsDirectory);
+}
+
+// Region codes become a hostname label (`<region>.storage.bunnycdn.com`), so an
+// unchecked value could point requests, and the zone password, at another host.
+export function assertStorageRegion(region: string): void {
+  if (region !== '' && !/^[a-z]{2,4}$/.test(region)) {
+    throw new ValidationError(`Invalid storage region "${region}". Use a region code such as ny, la, sg, syd, uk, se, br, jh.`);
+  }
 }

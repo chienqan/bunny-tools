@@ -4,10 +4,12 @@
 // library's `ApiKey`. So a user who stored only their account key (via
 // `bunny configure`) never has to paste per-zone or per-library secrets.
 //
-// Precedence per scope: explicitly stored key (flag/env/keychain/file) first,
-// then the value fetched with the account key. Fetched secrets are memoized for
-// the life of the process and never written to disk, so a rotated password is
-// picked up on the next run.
+// Precedence per scope: key stored for that exact zone/library (scoped env,
+// keychain, file), then the value fetched with the account key, then the
+// generic BUNNY_STORAGE_PASSWORD / BUNNY_STREAM_KEY (last, because it applies to
+// every zone and would be wrong for all but one). Fetched secrets are memoized
+// for the life of the process and never written to disk, so a rotated password
+// is picked up on the next run.
 
 import { createAccountClient } from '../api/account.js';
 import { createStreamClient } from '../api/stream.js';
@@ -64,15 +66,17 @@ function describeScope(scope: AuthScope): string {
 }
 
 export async function resolveScopedCredential(scope: AuthScope): Promise<string> {
+  if (scope.kind !== 'storage' && scope.kind !== 'stream') return resolveCredential(scope);
   try {
-    return await resolveCredential(scope);
+    return await resolveCredential(scope, { genericEnv: false });
   } catch (err) {
     if (!(err instanceof AuthError)) throw err;
-    const fallback = derive(scope);
-    if (!fallback) throw err;
     try {
-      return await fallback;
+      return await derive(scope)!;
     } catch (fallbackErr) {
+      // No account key (e.g. CI with only a generic zone password): use the generic env var.
+      const generic = await resolveCredential(scope).catch(() => null);
+      if (generic) return generic;
       if (fallbackErr instanceof AuthError) {
         throw new AuthError(
           `No credential for ${describeScope(scope)}. Run \`bunny configure\` to store your API key ` +

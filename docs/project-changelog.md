@@ -29,9 +29,17 @@ CLI redesign: commands you can guess, one credential, agent-friendly output. **B
 - `storage sync` looked up the zone region once per file; it now resolves once per run.
 - Variadic CLI arguments were wrapped in a nested array.
 - Error hints pointed at commands that do not exist (`pullzone hostname enable-ssl`, `auth set`, `storage-zone:get`, ...).
+- `storage zone update` re-fetches the zone (Bunny answers 204) instead of failing after a successful update.
+- `purge` exits 2 when any target fails, matching the documented partial-failure contract.
+- `cdn rule delete` and `cdn hostname remove` ask for confirmation (or `--yes`) like other destructive commands.
+- Unknown commands exit 1 with a rename hint instead of printing help and exiting 0.
 
 ### Security
 - Storage zone `Password`/`ReadOnlyPassword` and Stream library `ApiKey`/`ReadOnlyApiKey` are stripped from all CLI and MCP output (previously printed by `storagezone get` and `--json` lists).
+- Storage paths reject `.`/`..` segments and `?`, `#`, `\`, and every segment is percent-encoded. Previously `storage rm my-zone/. -r` (or `my-zone/a/..`, `my-zone/#`) slipped past the zone-root guard after URL normalization and deleted every file in the zone, and `rm my-zone/img/#a.png` deleted the whole `img/` directory. The same guard covers `deploy`.
+- `storage rm` without `-r` refuses directories (Bunny deletes directories recursively).
+- Storage region codes are validated before becoming a hostname label, so a crafted `--region` / `.bunnyrc` value cannot redirect requests carrying the zone password.
+- A generic `BUNNY_STORAGE_PASSWORD` / `BUNNY_STREAM_KEY` no longer overrides the exact per-zone key fetched with the account key; it is used only as a last resort.
 
 ### Migration from 0.1.x
 

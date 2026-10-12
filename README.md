@@ -261,7 +261,7 @@ You only need the **account API key**. Bunny uses four credential types, and bun
 | `stream:<library>` | Fetched with the account key; override with `BUNNY_STREAM_KEY_<ID>` |
 | `database:<name>` | `BUNNY_DATABASE_KEY_<NAME>` |
 
-Lookup order for each scope: `--flag` → scoped env var → generic env var → OS keychain → credentials file → (storage/stream only) fetched with the account key. Fetched secrets stay in memory and are never written to disk. Zone passwords and library keys are also stripped from every command's output.
+Lookup order for each scope: `--flag` → scoped env var (`..._<ZONE>`) → OS keychain → credentials file → (storage/stream only) fetched with the account key → generic env var (`BUNNY_STORAGE_PASSWORD` / `BUNNY_STREAM_KEY`). The generic variable comes last because it applies to every zone, so it never overrides the right password for another zone. Fetched secrets stay in memory and are never written to disk. Zone passwords and library keys are also stripped from every command's output.
 
 ## GitHub Actions
 
