@@ -32,22 +32,22 @@ describe('generateGitHubActionsWorkflow', () => {
     await rm(scratch, { recursive: true, force: true });
   });
 
-  it('writes .github/workflows/bunny-deploy.yml with the storage-zone secret name', async () => {
+  it('writes .github/workflows/bunny-deploy.yml needing only the account key', async () => {
     const result = await generateGitHubActionsWorkflow(scratch, config({ storageZone: 'my-app' }));
     expect(result.wrote).toBe(true);
     if (!result.wrote) return; // type narrowing
     const yaml = await readFile(result.path, 'utf8');
     expect(yaml).toContain('BUNNY_API_KEY');
-    expect(yaml).toContain('BUNNY_STORAGE_PASSWORD_MY_APP');
+    expect(yaml).not.toContain('BUNNY_STORAGE_PASSWORD');
     expect(yaml).toContain('npm install -g bunny-tools');
     expect(yaml).toContain('bunny deploy --delete');
     expect(yaml).toContain("paths-ignore:");
     expect(yaml).toContain('docs/**');
   });
 
-  it('returns secretsToAdd for both api-key and per-zone password', async () => {
+  it('asks only for the account key secret (zone password is fetched with it)', async () => {
     const result = await generateGitHubActionsWorkflow(scratch, config({ storageZone: 'site-prod' }));
-    expect(result.secretsToAdd).toEqual(['BUNNY_API_KEY', 'BUNNY_STORAGE_PASSWORD_SITE_PROD']);
+    expect(result.secretsToAdd).toEqual(['BUNNY_API_KEY']);
   });
 
   it('skips writing when workflow file already exists', async () => {
@@ -61,13 +61,5 @@ describe('generateGitHubActionsWorkflow', () => {
     // Untouched.
     const yaml = await readFile(result.path, 'utf8');
     expect(yaml).toBe('# user-edited\n');
-  });
-
-  it('uppercases hyphenated zone names for the secret env var', async () => {
-    const result = await generateGitHubActionsWorkflow(scratch, config({ storageZone: 'bytek-site' }));
-    expect(result.secretsToAdd).toContain('BUNNY_STORAGE_PASSWORD_BYTEK_SITE');
-    if (!result.wrote) return;
-    const yaml = await readFile(result.path, 'utf8');
-    expect(yaml).toContain('BUNNY_STORAGE_PASSWORD_BYTEK_SITE');
   });
 });

@@ -28,6 +28,8 @@ function defaultHandcurated(): string {
   return [
     '## Quickstart for AI agents',
     '',
+    'Task-oriented setup guide (install, authenticate, deploy, errors): [`agent-ready.md`](agent-ready.md), also served at `https://unpkg.com/bunny-tools/agent-ready.md`.',
+    '',
     '1. Check credentials: `bunny whoami --json`. If no account key is stored, ask the user to run `bunny configure` (paste the API key from dash.bunny.net → Account → API) or set `BUNNY_API_KEY`. That one key is all bunny-tools needs.',
     '2. Explore: `bunny storage ls` (storage zones), `bunny cdn list` (pull zones), `bunny dns list` (DNS zones). Add `--json` when you need to parse output.',
     '3. Deploy a static site: if there is no `bunny.json`, run `bunny init`. Then `bunny deploy --dry-run --json`, review, and `bunny deploy --json`.',

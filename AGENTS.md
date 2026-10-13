@@ -2,11 +2,13 @@
 
 Bunny.net CLI - storage deploy, CDN purge, full resource management.
 
-**Binary:** `bunny`  |  **Version:** 0.2.3  |  **Active commands:** 55/56
+**Binary:** `bunny`  |  **Version:** 0.2.4  |  **Active commands:** 55/56
 
 <!-- HANDCURATED:START -->
 
 ## Quickstart for AI agents
+
+Task-oriented setup guide (install, authenticate, deploy, errors): [`agent-ready.md`](agent-ready.md), also served at `https://unpkg.com/bunny-tools/agent-ready.md`.
 
 1. Check credentials: `bunny whoami --json`. If no account key is stored, ask the user to run `bunny configure` (paste the API key from dash.bunny.net → Account → API) or set `BUNNY_API_KEY`. That one key is all bunny-tools needs.
 2. Explore: `bunny storage ls` (storage zones), `bunny cdn list` (pull zones), `bunny dns list` (DNS zones). Add `--json` when you need to parse output.
