@@ -4,6 +4,24 @@ All notable changes to bunny-tools are documented here. This changelog follows [
 
 ---
 
+## [0.2.3] - 2026-10-13
+
+### Security
+- **Dependency vulnerabilities: 25 open Dependabot alerts down to 0** (`npm audit`: 0 runtime, 0 dev).
+  - `npm audit fix` updated `@modelcontextprotocol/sdk`'s transitive deps (`hono`, `qs`, `proxy-addr`, `fast-uri`, `ip-address`) and `undici`.
+  - `vitest` and `@vitest/coverage-v8` go to 4.1.11, and `tsx` to 4.23.15, which brings esbuild 0.28.2.
+- **`fast-glob` replaced with `tinyglobby`.** `fast-glob` → `micromatch` → `braces` carried a high-severity advisory with no patched `braces` release. bunny-tools only globbed the fixed pattern `**/*`, so the flaw was not reachable, but the swap removes it from the installed package. `tinyglobby` uses `picomatch`/`fdir` and has no `braces` dependency.
+- **Pull zone secrets are stripped from all output.** `ZoneSecurityKey` (token authentication) and `AWSSigningKey`/`AWSSigningSecret` (S3 origin signing) no longer appear in `cdn get`, `cdn list --json` or the MCP tools, including `full: true`. This matches the existing handling of storage zone passwords and Stream library keys.
+
+### Fixed
+- `cdn update` re-fetches the pull zone when Bunny answers without a body.
+- The e2e Vitest config uses `fileParallelism: false`. Vitest 4 ignored `poolOptions.forks.singleFork`, so e2e files could run in parallel.
+
+### Changed
+- The `e2e-nightly` workflow is disabled. Run the e2e suite manually before releases (`BUNNY_E2E=1 npm run test:e2e`).
+
+---
+
 ## [0.2.2] - 2026-10-12
 
 ### Changed

@@ -1,6 +1,6 @@
 import { stat } from 'node:fs/promises';
 import { relative, resolve } from 'node:path';
-import fg from 'fast-glob';
+import { glob } from 'tinyglobby';
 import * as ignoreNs from 'ignore';
 
 // `ignore` ships its callable factory as the default export on the namespace.
@@ -35,12 +35,14 @@ export async function walkPublicDir(opts: WalkOptions): Promise<WalkedFile[]> {
   const ig = ignore().add(opts.ignorePatterns ?? []);
   const cap = opts.perDirCap ?? 10_000;
 
-  const entries = await fg('**/*', {
+  // tinyglobby skips unreadable directories instead of throwing, like the
+  // previous fast-glob `suppressErrors` setting.
+  const entries = await glob('**/*', {
     cwd: root,
     onlyFiles: true,
     dot: true,
     followSymbolicLinks: false,
-    suppressErrors: true,
+    expandDirectories: false,
   });
 
   // Apply ignore (gitignore semantics) - ignore lib expects relative posix paths.

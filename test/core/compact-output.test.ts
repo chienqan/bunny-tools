@@ -51,3 +51,26 @@ describe('compact agent-facing shapes', () => {
     });
   });
 });
+
+describe('pull zone secret stripping', () => {
+  it('removes the token-auth key and S3 signing credentials', async () => {
+    const { toPublicPullZone } = await import('../../src/core/zones.js');
+    const raw = {
+      Id: 1,
+      Name: 'pz',
+      OriginUrl: null,
+      Enabled: true,
+      Hostnames: [],
+      ZoneSecurityKey: 'secret-token-key',
+      AWSSigningKey: 'aws-key',
+      AWSSigningSecret: 'aws-secret',
+      AWSSigningRegionName: 'us-east-1',
+    } as unknown as Parameters<typeof toPublicPullZone>[0];
+    const pub = toPublicPullZone(raw) as unknown as Record<string, unknown>;
+    expect(pub).not.toHaveProperty('ZoneSecurityKey');
+    expect(pub).not.toHaveProperty('AWSSigningKey');
+    expect(pub).not.toHaveProperty('AWSSigningSecret');
+    expect(pub['AWSSigningRegionName']).toBe('us-east-1');
+    expect(pub['Name']).toBe('pz');
+  });
+});
