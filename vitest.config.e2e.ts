@@ -18,11 +18,9 @@ export default defineConfig({
     hookTimeout: 60000,
     // Sequential — Bunny rate-limits, and our resources collide on lookup
     // otherwise (e.g. listing right after deletion sometimes 404s).
+    // Vitest 4 dropped `poolOptions.forks.singleFork`; running files one at a
+    // time is now `fileParallelism: false`.
     pool: 'forks',
-    poolOptions: {
-      forks: {
-        singleFork: true,
-      },
-    },
+    fileParallelism: false,
   },
 });

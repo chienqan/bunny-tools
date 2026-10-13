@@ -55,21 +55,34 @@ export async function deleteStorageZone(id: number): Promise<void> {
 }
 
 // Pull zones -----------------------------------------------------------------
+// Results go through toPublicPullZone so pull zone secrets (token-auth key, S3
+// origin signing credentials) never reach stdout or MCP.
+
+const PULL_ZONE_SECRET_FIELDS = ['ZoneSecurityKey', 'AWSSigningKey', 'AWSSigningSecret'] as const;
+
+export function toPublicPullZone(z: PullZone): PullZone {
+  const out = { ...z } as Record<string, unknown>;
+  for (const field of PULL_ZONE_SECRET_FIELDS) delete out[field];
+  return out as PullZone;
+}
 
 export async function listPullZones(): Promise<PullZone[]> {
-  return client().listPullZones();
+  return (await client().listPullZones()).map(toPublicPullZone);
 }
 
 export async function getPullZone(id: number): Promise<PullZone> {
-  return client().getPullZone(id);
+  return toPublicPullZone(await client().getPullZone(id));
 }
 
 export async function createPullZone(name: string, originUrl: string): Promise<PullZone> {
-  return client().createPullZone({ Name: name, OriginUrl: originUrl });
+  return toPublicPullZone(await client().createPullZone({ Name: name, OriginUrl: originUrl }));
 }
 
 export async function updatePullZone(id: number, body: Record<string, unknown>): Promise<PullZone> {
-  return client().updatePullZone(id, body);
+  const c = client();
+  const updated = await c.updatePullZone(id, body);
+  // Re-fetch when Bunny answers without a body (204), so callers get the real state.
+  return toPublicPullZone(updated ?? (await c.getPullZone(id)));
 }
 
 export async function deletePullZone(id: number): Promise<void> {
