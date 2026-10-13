@@ -8,6 +8,8 @@
 
 **Package:** `bunny-tools` &middot; **Binary:** `bunny` &middot; **Node:** ≥20
 
+**AI agents:** point your agent at [`agent-ready.md`](https://unpkg.com/bunny-tools/agent-ready.md) (`https://unpkg.com/bunny-tools/agent-ready.md`). It is a step-by-step guide to install, authenticate, deploy, and handle errors safely.
+
 ## Why bunny-tools
 
 Bunny.net is a great CDN/storage/DNS/streaming platform but managing it from the terminal was DIY territory. bunny-tools fixes that with one binary covering Storage, CDN, DNS, Stream, and Edge Scripting - and a built-in MCP server so AI agents can drive every command:

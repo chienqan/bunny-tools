@@ -117,9 +117,8 @@ describe.skipIf(!E2E_ENABLED)('e2e: full deploy pipeline', () => {
       expect(workflow).toMatch(/npm install -g bunny-tools/);
       expect(workflow).toMatch(/run:\s*bunny deploy/);
       expect(workflow).toMatch(/BUNNY_API_KEY/);
-      // Per-zone storage password env var — uppercase + underscores, with
-      // the zone name embedded. Bug #10 (rc.10) was a flag-name typo here.
-      expect(workflow).toMatch(/BUNNY_STORAGE_PASSWORD_/);
+      // Only the account key: the zone password is fetched with it at deploy time.
+      expect(workflow).not.toMatch(/BUNNY_STORAGE_PASSWORD_/);
     } finally {
       await rm(initDir, { recursive: true, force: true });
     }

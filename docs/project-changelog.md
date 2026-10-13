@@ -4,6 +4,16 @@ All notable changes to bunny-tools are documented here. This changelog follows [
 
 ---
 
+## [0.2.4] - 2026-10-13
+
+### Added
+- **`agent-ready.md`**: a task-oriented guide written for AI agents, modeled on Fly.io's agent-ready page. It covers choosing a path, install and verify, the human-approved auth step (one API key, never zone passwords), deploying a static site, storage, CDN and custom domains, DNS, MCP, the exit-code contract, an error-to-action table, and safety rules for destructive commands. It ships in the npm package, so agents can read it at `https://unpkg.com/bunny-tools/agent-ready.md` without cloning the repo. README and AGENTS.md link to it.
+
+### Changed
+- `bunny init --ci` generates a workflow that needs only the `BUNNY_API_KEY` secret. The per-zone `BUNNY_STORAGE_PASSWORD_<ZONE>` secret was redundant, because the zone password is fetched with the account key at deploy time.
+
+---
+
 ## [0.2.3] - 2026-10-13
 
 ### Security
