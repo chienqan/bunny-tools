@@ -141,30 +141,31 @@ All shipped same project (no split); 129 unit tests + 44 e2e tests passing; 51 a
 - `bunny configure` - profile-aware credential walkthrough (rc.9+)
 - `bunny configure list|switch|remove` - multi-account management (rc.9+)
 - `bunny deploy [--dry-run]` - storage sync + CDN purge (the main command)
-- `bunny purge <target>` - standalone cache purge by URL/tag/zone
+- `bunny purge [urls...] [--pull-zone <name|id>] [--tag <t>]` - standalone cache purge
 - `bunny whoami` - show active credentials (rc.8+)
 - `bunny docs [topic]` - quick help (rc.8+)
 - `bunny install mcp` - self-bootstrap Claude config (rc.19+)
 - `bunny update` - self-update via npm (rc.19+)
 
-**Storage (with auto-default zone rc.10+):**
-- `bunny storage upload|download|list|delete|sync`
+**Storage (0.2.0: `<zone>/<path>` addressing, zone password fetched with the API key):**
+- `bunny storage ls|upload|download|rm|sync`
+- `bunny storage zone list|get|create|update|delete`
 
-**Zones (space-delimited syntax rc.7+; hyphen aliases rc.18 DROPPED):**
-- `bunny storagezone list|get|create|update|delete` (canonical only)
-- `bunny pullzone list|get|create|update|delete` (canonical only; `cdn` alias for group, rc.17)
-- `bunny pullzone edgerule list|add|delete` (canonical only)
+**CDN (0.2.0: `pullzone` → `cdn`; names or ids):**
+- `bunny cdn list|get|create|update|delete`
+- `bunny cdn rule list|add|delete`
+- `bunny cdn hostname list|add|remove`, `bunny domain connect`
 
 **DNS (13 record types as of rc.24, up from 8 in rc.23):**
-- `bunny dns list|get|create|delete`
-- `bunny dns record list|add|update|delete` (A, AAAA, ALIAS, CNAME, TXT, NS, MX, SRV, CAA, REDIRECT, FLATTEN, PULLZONE, PTR, SCRIPT - rc.24 extended)
+- `bunny dns list|get|create|delete` (zones by domain or id)
+- `bunny dns record list|add|update|delete` (A, AAAA, CNAME, TXT, MX, REDIRECT, PULLZONE, SRV, CAA, PTR, SCRIPT, NS)
 
 **Stream (Phase 5, shipped rc.10):**
-- `bunny stream library list|create|get|delete` (get/delete rc.10+)
+- `bunny stream library list|create|delete`
 - `bunny stream video list|upload|delete`
 
 **Magic Containers (Phase 5, shipped rc.10):**
-- `bunny containers app list|create|delete` (create → planned in rc.12, v0.2)
+- `bunny containers list|delete` (`create` planned: Bunny's v3 schema is not modeled yet)
 
 **Edge Scripting (Phase 5, shipped rc.10):**
 - `bunny scripting list|deploy|delete`

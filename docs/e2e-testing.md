@@ -1,6 +1,6 @@
 # End-to-End Testing
 
-This is **drift detection**, not unit testing. The 122 unit tests in `test/**/*.test.ts` mock Bunny via undici MockAgent and cannot detect when Bunny.net changes a field name, status code, or endpoint shape. The e2e suite at `test/e2e/**/*.e2e.ts` hits the real Bunny API and fails when our CLI's assumptions stop matching reality.
+This is **drift detection**, not unit testing. The unit tests in `test/**/*.test.ts` mock Bunny via undici MockAgent and cannot detect when Bunny.net changes a field name, status code, or endpoint shape. The e2e suite at `test/e2e/**/*.e2e.ts` hits the real Bunny API and fails when our CLI's assumptions stop matching reality.
 
 ## Running locally
 
@@ -8,12 +8,19 @@ This is **drift detection**, not unit testing. The 122 unit tests in `test/**/*.
 # Without BUNNY_E2E set, the entire suite is skipped - safe to run anywhere.
 npm run test:e2e
 
-# With BUNNY_E2E=1 + a Bunny account key, all 30 tests run against the real
-# API. Each test creates name-prefixed throwaway resources and cleans them up.
-BUNNY_E2E=1 BUNNY_ACCOUNT_KEY=<your-key> npm run test:e2e
+# With BUNNY_E2E=1 + a Bunny account key, the suite runs against the real API.
+# Each test creates name-prefixed throwaway resources and cleans them up.
+BUNNY_E2E=1 BUNNY_API_KEY=<your-key> npm run test:e2e
+
+# Optional: also run the cert/hostname/domain-connect MCP tests (3 tests,
+# skipped otherwise). Needs a domain whose DNS zone is on the same Bunny account; the
+# tests add and remove `bt-e2e-*` subdomain hostnames, certificates and records.
+BUNNY_E2E=1 BUNNY_API_KEY=<your-key> BUNNY_E2E_DOMAIN=<your-domain> npm run test:e2e
 ```
 
-**Expected runtime:** ~2:15 on a good network. Each test creates real Bunny resources, so the suite is rate-limited by Bunny's response time, not local CPU.
+Run it before every release; the scheduled `e2e-nightly` workflow is disabled (it can still be triggered manually after re-enabling it in GitHub Actions).
+
+**Expected runtime:** ~1 minute on a good network. Each test creates real Bunny resources, so the suite is rate-limited by Bunny's response time, not local CPU.
 
 **What gets touched on your account:**
 - Storage zones, pull zones, DNS zones, Stream libraries, Stream videos, edge scripts
@@ -25,15 +32,17 @@ BUNNY_E2E=1 BUNNY_ACCOUNT_KEY=<your-key> npm run test:e2e
 
 | File | Tests | Covers |
 | --- | --- | --- |
-| `account-readonly.e2e.ts` | 3 | `whoami`, `manifest --names`, `storagezone list` |
+| `account-readonly.e2e.ts` | 3 | `whoami`, `manifest --names`, `storage zone list` |
 | `storage-zones.e2e.ts` | 4 | Zone CRUD + lowercase-region uppercasing (Bug #9 regression) |
-| `storage-files.e2e.ts` | 7 | Upload/download/list/sync/delete + subdir listing (Bug #1 regression) + bare-list (Bug #2 regression) |
+| `storage-files.e2e.ts` | 9 | `<zone>/<path>` upload/download/ls/sync/rm, trailing-slash upload, zone-root delete refused, subdir listing (Bug #1), bare `ls <zone>` (Bug #2) |
 | `pull-zones.e2e.ts` | 2 | Pull zone CRUD with `--origin` and raw-body update |
 | `edge-rules.e2e.ts` | 2 | Edge rule add/list/delete via `/edgerules/addOrUpdate` (Bug #5 regression) |
-| `dns.e2e.ts` | 4 | DNS zone + record CRUD with positional args |
+| `dns.e2e.ts` | 5 | DNS zone + record CRUD with positional args, REDIRECT round-trip |
 | `stream.e2e.ts` | 3 | Library CRUD + 8 KB video upload + delete-command-exists (Bug #8 regression) |
-| `scripting.e2e.ts` | 1 | Edge script create + update via `--id` (Bug #7 regression) + delete |
-| `deploy.e2e.ts` | 4 | Full pipeline: dry-run → upload → state-cache hit → modify+redeploy |
+| `scripting.e2e.ts` | 1 | Edge script create + upsert-by-name update (Bug #7 regression) + delete |
+| `deploy.e2e.ts` | 5 | Full pipeline: dry-run → upload → state-cache hit → modify+redeploy; `init --ci` workflow |
+| `domain.e2e.ts` | 2 | `domain connect --no-wait` and idempotent re-run |
+| `mcp.e2e.ts` | 18 | MCP tools end-to-end (3 need `BUNNY_E2E_DOMAIN`; 2 are placeholders covered elsewhere and always skip) |
 
 ## Provisioning a Bunny account
 
@@ -41,7 +50,7 @@ For contributors who don't have a real account:
 
 1. Sign up at https://bunny.net (free tier supports everything tested except Stream video bandwidth - and the test fixture is 8 KB)
 2. Generate an Account API Key in dashboard → Account Settings → API
-3. Export it: `export BUNNY_ACCOUNT_KEY=<your-key>`
+3. Export it: `export BUNNY_API_KEY=<your-key>`
 4. Run the suite: `BUNNY_E2E=1 npm run test:e2e`
 
 ## Adding a new service
@@ -83,9 +92,9 @@ If the new service needs a cleanup routine, add the type to `helpers/cleanup-reg
 
 ## CI flow
 
-The nightly GitHub Action at `.github/workflows/e2e-nightly.yml` runs the same suite at 03:00 UTC daily plus on `workflow_dispatch`. On failure, it opens a GitHub issue labeled `e2e,drift` with the failure log and a link to the run.
+`.github/workflows/e2e-nightly.yml` runs the same suite on a 03:00 UTC schedule plus `workflow_dispatch`. **It is currently disabled** (each run creates and deletes real resources on the account behind the secret); re-enable it under Actions → e2e-nightly → "Enable workflow". On failure, it opens a GitHub issue labeled `e2e,drift` with the failure log and a link to the run.
 
-**Required secret:** `BUNNY_E2E_ACCOUNT_KEY` - set in GitHub repo Settings → Secrets and variables → Actions. Use the same value your local `BUNNY_ACCOUNT_KEY` uses, or a separate dedicated test-account key.
+**Required secret:** `BUNNY_E2E_API_KEY` (optional: `BUNNY_E2E_DOMAIN`) - set in GitHub repo Settings → Secrets and variables → Actions. Use a dedicated test-account key where possible.
 
 **Manual trigger:** Actions tab → "e2e-nightly" → "Run workflow" button. Useful for verifying the workflow + secret without waiting for the nightly cron.
 

@@ -237,3 +237,40 @@ describe('Stream library key fallback', () => {
     expect(await listVideos(77)).toEqual([]);
   });
 });
+
+describe('rejected vs missing credentials', () => {
+  const envBackup: Record<string, string | undefined> = {};
+
+  beforeEach(() => {
+    for (const k of ['BUNNY_API_KEY', 'BUNNY_STREAM_KEY', 'BUNNY_STREAM_KEY_78']) {
+      envBackup[k] = process.env[k];
+      delete process.env[k];
+    }
+    _resetDerivedKeys();
+  });
+
+  afterEach(() => {
+    for (const [k, v] of Object.entries(envBackup)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  });
+
+  it('a revoked account key says so instead of "no credential"', async () => {
+    process.env['BUNNY_API_KEY'] = 'revoked-key';
+    const { listVideos } = await import('../../src/core/stream.js');
+    getMockAgent()
+      .get('https://api.bunny.net')
+      .intercept({ path: '/videolibrary/78', method: 'GET' })
+      .reply(401, { Message: 'Unauthorized' });
+    const err = await listVideos(78).catch((e: Error) => e);
+    expect((err as Error).message).toMatch(/wrong or was revoked/);
+    expect((err as Error).message).not.toMatch(/No credential/);
+  });
+
+  it('a missing account key says "no credential" and how to fix it', async () => {
+    const { listVideos } = await import('../../src/core/stream.js');
+    const err = await listVideos(78).catch((e: Error) => e);
+    expect((err as Error).message).toMatch(/No credential for Stream library 78\. Run `bunny configure`/);
+  });
+});

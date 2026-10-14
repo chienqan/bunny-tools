@@ -29,10 +29,34 @@ describe('name → id resolvers', () => {
     else process.env['BUNNY_API_KEY'] = prevKey;
   });
 
-  it('numeric refs pass through without a request', async () => {
+  it('JS numbers are ids and need no request', async () => {
     // No interceptors registered: any HTTP call would throw.
-    expect(await resolvePullZoneId('123')).toBe(123);
+    expect(await resolvePullZoneId(123)).toBe(123);
     expect(await resolveDnsZoneId(456)).toBe(456);
+  });
+
+  it('an all-digit string matching an id resolves to that id', async () => {
+    getMockAgent()
+      .get('https://api.bunny.net')
+      .intercept({ path: /\/pullzone.*/, method: 'GET' })
+      .reply(200, { Items: [{ Id: 123, Name: 'site', OriginUrl: null, Enabled: true, Hostnames: [] }], HasMoreItems: false });
+    expect(await resolvePullZoneId('123')).toBe(123);
+  });
+
+  it('an all-digit name is found by name, not misread as an id', async () => {
+    getMockAgent()
+      .get('https://api.bunny.net')
+      .intercept({ path: /\/pullzone.*/, method: 'GET' })
+      .reply(200, { Items: [{ Id: 5789465, Name: '2024', OriginUrl: null, Enabled: true, Hostnames: [] }], HasMoreItems: false });
+    expect(await resolvePullZoneId('2024')).toBe(5789465);
+  });
+
+  it('an all-digit string matching nothing lists what exists', async () => {
+    getMockAgent()
+      .get('https://api.bunny.net')
+      .intercept({ path: /\/pullzone.*/, method: 'GET' })
+      .reply(200, { Items: [{ Id: 1, Name: 'site', OriginUrl: null, Enabled: true, Hostnames: [] }], HasMoreItems: false });
+    await expect(resolvePullZoneId('999')).rejects.toThrowError(/Pull zone "999" not found\. Available: site/);
   });
 
   it('pull zone by name', async () => {

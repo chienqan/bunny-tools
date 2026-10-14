@@ -1,5 +1,7 @@
 # bunny-tools Project Roadmap
 
+> **Historical record (0.1.x release candidates).** Command names in the rc entries below predate the 0.2.0 redesign (`storagezone` → `storage zone`, `pullzone` → `cdn`, ...). Current commands: [`../AGENTS.md`](../AGENTS.md); release history since 0.2.0: [`project-changelog.md`](project-changelog.md).
+
 **Status:** Phases 1–7 Complete ✓ | v0.1.0-rc.26 Live | MCP E2E Harness + DNS REDIRECT E2E + PZ Hostname Management + SSL Provisioning Live ✓
 **Current Version:** v0.1.0-rc.43 (shipped 2026-05-03)  
 **Install:** `npm i -g bunny-tools`

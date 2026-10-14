@@ -9,7 +9,7 @@
 import { atomicWriteJson, readJsonOrNull } from '../util/fs.js';
 import { logger } from '../util/logger.js';
 import { configDir, credentialsFile } from '../util/paths.js';
-import { AuthError } from '../api/errors.js';
+import { AuthError, MissingCredentialError } from '../api/errors.js';
 import type { AuthScope } from '../api/http.js';
 
 const KEYCHAIN_SERVICE = 'bunny-tools';
@@ -144,11 +144,22 @@ function keychainAccount(profile: string, scope: AuthScope): string {
   return `${profile}:${scopeToAccount(scope)}`;
 }
 
+export type CredentialSource = 'flag' | 'env' | 'keychain' | 'file' | 'prompt';
+
 export async function resolveCredential(
   scope: AuthScope,
   overrides: ResolverOverrides = {},
 ): Promise<string> {
-  if (overrides.flag && overrides.flag.length > 0) return overrides.flag;
+  return (await resolveCredentialWithSource(scope, overrides)).value;
+}
+
+// Same chain as resolveCredential, also reporting where the value came from
+// (shown by `bunny whoami`).
+export async function resolveCredentialWithSource(
+  scope: AuthScope,
+  overrides: ResolverOverrides = {},
+): Promise<{ value: string; source: CredentialSource }> {
+  if (overrides.flag && overrides.flag.length > 0) return { value: overrides.flag, source: 'flag' };
 
   const profile = overrides.profile ?? (await getActiveProfile());
 
@@ -161,7 +172,7 @@ export async function resolveCredential(
       : envNames;
   for (const name of usableEnv) {
     const v = process.env[name];
-    if (v && v.length > 0) return v;
+    if (v && v.length > 0) return { value: v, source: 'env' };
   }
 
   // Keychain. Try `<profile>:<scope>` first; for the default profile, fall back
@@ -170,10 +181,10 @@ export async function resolveCredential(
   if (keychain) {
     try {
       const v = await keychain.getPassword(KEYCHAIN_SERVICE, keychainAccount(profile, scope));
-      if (v && v.length > 0) return v;
+      if (v && v.length > 0) return { value: v, source: 'keychain' };
       if (profile === DEFAULT_PROFILE) {
         const legacy = await keychain.getPassword(KEYCHAIN_SERVICE, scopeToAccount(scope));
-        if (legacy && legacy.length > 0) return legacy;
+        if (legacy && legacy.length > 0) return { value: legacy, source: 'keychain' };
       }
     } catch (err) {
       logger.debug(`keychain read failed: ${(err as Error).message}`);
@@ -185,14 +196,14 @@ export async function resolveCredential(
   const profileBag = store.profiles[profile];
   if (profileBag) {
     const fileVal = profileBag[scopeToAccount(scope)];
-    if (fileVal && fileVal.length > 0) return fileVal;
+    if (fileVal && fileVal.length > 0) return { value: fileVal, source: 'file' };
   }
 
   if (overrides.prompt && process.stdin.isTTY) {
-    return overrides.prompt(scope);
+    return { value: await overrides.prompt(scope), source: 'prompt' };
   }
 
-  throw new AuthError(
+  throw new MissingCredentialError(
     `No credential for scope ${scopeToAccount(scope)} in profile "${profile}". ` +
       `Set via \`bunny configure${profile !== DEFAULT_PROFILE ? ` --profile=${profile}` : ''}\` ` +
       `or env (${scopeToEnvVars(scope).join(', ')}).`,
