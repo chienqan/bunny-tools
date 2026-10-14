@@ -11,6 +11,13 @@ export class AuthError extends BunnyError {
   override readonly name = 'AuthError';
 }
 
+// No credential is stored for the scope (as opposed to Bunny rejecting one).
+// Callers that can derive the credential another way catch this subclass only.
+export class MissingCredentialError extends AuthError {}
+
+// Bunny answered 401/403: a credential was sent but is wrong, revoked, or lacks access.
+export class RejectedCredentialError extends AuthError {}
+
 export class ConfigError extends BunnyError {
   override readonly name = 'ConfigError';
 }

@@ -1,6 +1,6 @@
 {
   "name": "bunny-tools",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Bunny.net CLI + MCP server. Deploy static sites to Bunny Storage and purge CDN with one command. Manage Storage, Pull Zones, DNS, Stream, Edge Scripting from a single binary - plus AI-native MCP for Claude Code & Claude Desktop.",
   "keywords": [
     "bunny",

@@ -13,7 +13,7 @@
 
 import { createAccountClient } from '../api/account.js';
 import { createStreamClient } from '../api/stream.js';
-import { AuthError, ConfigError } from '../api/errors.js';
+import { AuthError, ConfigError, MissingCredentialError } from '../api/errors.js';
 import type { AuthScope } from '../api/http.js';
 import { resolveCredential } from '../config/credential-resolver.js';
 
@@ -70,15 +70,17 @@ export async function resolveScopedCredential(scope: AuthScope): Promise<string>
   try {
     return await resolveCredential(scope, { genericEnv: false });
   } catch (err) {
-    if (!(err instanceof AuthError)) throw err;
+    if (!(err instanceof MissingCredentialError)) throw err;
     try {
       return await derive(scope)!;
     } catch (fallbackErr) {
       // No account key (e.g. CI with only a generic zone password): use the generic env var.
       const generic = await resolveCredential(scope).catch(() => null);
       if (generic) return generic;
-      if (fallbackErr instanceof AuthError) {
-        throw new AuthError(
+      // Only say "no credential" when none exists. A rejected (wrong or
+      // revoked) account key surfaces as-is with its own hint.
+      if (fallbackErr instanceof MissingCredentialError) {
+        throw new MissingCredentialError(
           `No credential for ${describeScope(scope)}. Run \`bunny configure\` to store your API key ` +
             '(zone passwords and library keys are then fetched automatically).',
         );

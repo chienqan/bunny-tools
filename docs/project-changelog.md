@@ -4,6 +4,18 @@ All notable changes to bunny-tools are documented here. This changelog follows [
 
 ---
 
+## [0.2.5] - 2026-10-14
+
+### Fixed
+- **All-digit names are no longer misread as ids.** A string reference such as `2024` is now looked up: an existing id wins, otherwise it matches by name. Previously a pull zone, DNS zone, storage zone, library or script named `2024` was treated as id 2024, which could target the wrong resource on delete. Numbers passed by MCP tools are still ids, and `storage zone get` uses the same resolver.
+- **A revoked or wrong API key is reported as such.** A 401/403 now says the key was rejected, with a scope-specific fix (store a new key with `bunny configure`, or remove a stale `BUNNY_STORAGE_PASSWORD_*`/`BUNNY_STREAM_KEY_*`). Previously the zone-password fallback turned a rejected key into a misleading "No credential … run `bunny configure`". "No credential" now appears only when none is stored (`MissingCredentialError` vs `RejectedCredentialError`).
+- **`bunny whoami` shows where each key is stored** (`keychain`, `file` or `env`) instead of always `unknown`.
+
+### Changed
+- Docs: updated `code-standards.md`, `project-overview-pdr.md` and `e2e-testing.md` to the 0.2.x command names, and marked the roadmap as a historical record. `e2e-testing.md` now uses the correct env var (`BUNNY_API_KEY`, not `BUNNY_ACCOUNT_KEY`), documents the optional `BUNNY_E2E_DOMAIN` that enables the 3 domain/cert MCP tests (the other 2 skipped tests are permanent placeholders), and notes that the nightly workflow is disabled. Verified: with `BUNNY_E2E_DOMAIN` set, the MCP suite runs 16 passed, 2 skipped, including certificate provisioning and `domain_connect`.
+
+---
+
 ## [0.2.4] - 2026-10-13
 
 ### Added

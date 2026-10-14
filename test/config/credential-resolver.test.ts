@@ -3,10 +3,11 @@ import {
   envVarSuffix,
   maskCredential,
   resolveCredential,
+  resolveCredentialWithSource,
   scopeToAccount,
   scopeToEnvVars,
 } from '../../src/config/credential-resolver.js';
-import { AuthError } from '../../src/api/errors.js';
+import { AuthError, MissingCredentialError } from '../../src/api/errors.js';
 import type { AuthScope } from '../../src/api/http.js';
 
 const ENV_KEYS = [
@@ -103,6 +104,38 @@ describe('credential resolver', () => {
     await expect(
       resolveCredential({ kind: 'account' } as AuthScope, { keychain: fake }),
     ).rejects.toBeInstanceOf(AuthError);
+  });
+
+  it('reports where the credential came from', async () => {
+    const fake = {
+      getPassword: vi.fn(async () => 'kc-key'),
+      setPassword: vi.fn(),
+      deletePassword: vi.fn(),
+      findCredentials: vi.fn(),
+    };
+    expect(await resolveCredentialWithSource({ kind: 'account' }, { keychain: fake })).toEqual({ value: 'kc-key', source: 'keychain' });
+    process.env['BUNNY_API_KEY'] = 'env-key';
+    expect(await resolveCredentialWithSource({ kind: 'account' }, { keychain: fake })).toEqual({ value: 'env-key', source: 'env' });
+    expect(await resolveCredentialWithSource({ kind: 'account' }, { flag: 'f', keychain: fake })).toEqual({ value: 'f', source: 'flag' });
+  });
+
+  it('a missing credential is a MissingCredentialError (callers may derive it instead)', async () => {
+    // Point the credentials file at an empty temp dir so the developer's real file can't satisfy it.
+    const { mkdtemp, rm } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = await mkdtemp(join(tmpdir(), 'cred-missing-'));
+    const prevXdg = process.env['XDG_CONFIG_HOME'];
+    process.env['XDG_CONFIG_HOME'] = dir;
+    try {
+      await expect(resolveCredential({ kind: 'account' } as AuthScope, { keychain: null })).rejects.toBeInstanceOf(
+        MissingCredentialError,
+      );
+    } finally {
+      if (prevXdg === undefined) delete process.env['XDG_CONFIG_HOME'];
+      else process.env['XDG_CONFIG_HOME'] = prevXdg;
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it('maskCredential redacts long values', () => {

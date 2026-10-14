@@ -1,6 +1,11 @@
 // core/resolve - turn a user-supplied reference (name, domain, or numeric id)
-// into the id Bunny's API wants. Numeric refs pass through without a network
-// call; anything else is looked up by name (case-insensitive).
+// into the id Bunny's API wants.
+//
+// A JS number (MCP tools pass ids as numbers) is always an id. A string is
+// looked up in the account's list: an all-digit string matching an existing
+// id resolves to that id, otherwise the string is matched against names
+// (case-insensitive). So a zone literally named "2024" is found by name
+// instead of being misread as id 2024.
 
 import { createAccountClient } from '../api/account.js';
 import { createStreamClient } from '../api/stream.js';
@@ -34,40 +39,52 @@ export function pickByName<T>(
   );
 }
 
+// Resolve a string ref against a fetched list: exact id first (digit strings
+// only), then name.
+function resolveInList<T, Id extends number | string>(
+  items: T[],
+  ref: string,
+  idOf: (item: T) => Id,
+  nameOf: (item: T) => string,
+  kind: string,
+  listCommand: string,
+): Id {
+  if (NUMERIC.test(ref)) {
+    const byId = items.find((i) => String(idOf(i)) === ref);
+    if (byId) return idOf(byId);
+  }
+  return idOf(pickByName(items, ref, nameOf, kind, listCommand));
+}
+
 export async function resolvePullZoneId(ref: string | number): Promise<number> {
   if (typeof ref === 'number') return ref;
-  if (NUMERIC.test(ref)) return Number.parseInt(ref, 10);
   const zones = await account().listPullZones();
-  return pickByName(zones, ref, (z) => z.Name, 'Pull zone', 'bunny cdn list').Id;
+  return resolveInList(zones, ref, (z) => z.Id, (z) => z.Name, 'Pull zone', 'bunny cdn list');
 }
 
 // DNS zones are referenced by domain. A trailing dot (FQDN form) is ignored.
 export async function resolveDnsZoneId(ref: string | number): Promise<number> {
   if (typeof ref === 'number') return ref;
-  if (NUMERIC.test(ref)) return Number.parseInt(ref, 10);
   const zones = await account().listDnsZones();
-  return pickByName(zones, ref.replace(/\.$/, ''), (z) => z.Domain, 'DNS zone', 'bunny dns list').Id;
+  return resolveInList(zones, ref.replace(/\.$/, ''), (z) => z.Id, (z) => z.Domain, 'DNS zone', 'bunny dns list');
 }
 
 export async function resolveStorageZoneId(ref: string | number): Promise<number> {
   if (typeof ref === 'number') return ref;
-  if (NUMERIC.test(ref)) return Number.parseInt(ref, 10);
   const zones = await account().listStorageZones();
-  return pickByName(zones, ref, (z) => z.Name, 'Storage zone', 'bunny storage ls').Id;
+  return resolveInList(zones, ref, (z) => z.Id, (z) => z.Name, 'Storage zone', 'bunny storage ls');
 }
 
 export async function resolveLibraryId(ref: string | number): Promise<number> {
   if (typeof ref === 'number') return ref;
-  if (NUMERIC.test(ref)) return Number.parseInt(ref, 10);
   const libs = await createStreamClient({ resolveCredential: (s) => resolveCredential(s) }).listLibraries();
-  return pickByName(libs, ref, (l) => l.Name, 'Stream library', 'bunny stream library list').Id;
+  return resolveInList(libs, ref, (l) => l.Id, (l) => l.Name, 'Stream library', 'bunny stream library list');
 }
 
 export async function resolveScriptId(ref: string | number): Promise<number> {
   if (typeof ref === 'number') return ref;
-  if (NUMERIC.test(ref)) return Number.parseInt(ref, 10);
   const scripts = await account().listEdgeScripts();
-  return pickByName(scripts, ref, (s) => s.Name, 'Edge script', 'bunny scripting list').Id;
+  return resolveInList(scripts, ref, (s) => s.Id, (s) => s.Name, 'Edge script', 'bunny scripting list');
 }
 
 // Container app ids are opaque strings, so match either the id or the name.

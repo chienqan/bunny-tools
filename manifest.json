@@ -1,7 +1,7 @@
 {
   "cliName": "bunny-tools",
   "binary": "bunny",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Bunny.net CLI - storage deploy, CDN purge, full resource management.",
   "commands": [
     {

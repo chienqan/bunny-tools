@@ -28,8 +28,8 @@ describe('resolvePurgeTargets', () => {
     ]);
   });
 
-  it('numeric pull zone needs no lookup', async () => {
-    expect(await resolvePurgeTargets({ pullZone: '42' })).toEqual([{ kind: 'pullzone', pullZoneId: 42 }]);
+  it('a numeric pull zone id needs no lookup', async () => {
+    expect(await resolvePurgeTargets({ pullZone: 42 })).toEqual([{ kind: 'pullzone', pullZoneId: 42 }]);
   });
 
   it('pull zone + tag becomes a tag purge', async () => {

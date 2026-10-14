@@ -1,7 +1,7 @@
 import { request } from 'undici';
 import type { Dispatcher } from 'undici';
 import { logger } from '../util/logger.js';
-import { AuthError, BunnyApiError, parseBunnyErrorBody } from './errors.js';
+import { AuthError, BunnyApiError, RejectedCredentialError, parseBunnyErrorBody } from './errors.js';
 
 // Auth scope names used by the credentials resolver. Each call site declares
 // which credential it needs; the http layer asks the resolver to provide it.
@@ -12,6 +12,20 @@ export type AuthScope =
   | { kind: 'database'; name: string };
 
 export type CredentialResolver = (scope: AuthScope) => Promise<string>;
+
+// What to do when Bunny rejects the credential for a scope.
+function rejectedHint(scope: AuthScope): string {
+  switch (scope.kind) {
+    case 'account':
+      return 'The API key is wrong or was revoked. Run `bunny configure` to store a new one (dash.bunny.net → Account Settings → API).';
+    case 'storage':
+      return `The password used for storage zone "${scope.zone}" was rejected. If BUNNY_STORAGE_PASSWORD_* or a stored zone password is set, it may be stale; remove it to use the one fetched with your API key.`;
+    case 'stream':
+      return `The API key used for Stream library ${scope.libraryId} was rejected. If BUNNY_STREAM_KEY_* or a stored library key is set, it may be stale; remove it to use the one fetched with your API key.`;
+    case 'database':
+      return `The access key for database "${scope.name}" was rejected.`;
+  }
+}
 
 export type CallOptions = {
   base: string;
@@ -105,7 +119,9 @@ export function createHttpClient(deps: HttpClientDeps) {
         if (status === 401 || status === 403) {
           // Drain body to free socket; throw without retry.
           await res.body.text().catch(() => '');
-          throw new AuthError(`Bunny rejected credentials (HTTP ${status}) for ${method} ${opts.path}`);
+          throw new RejectedCredentialError(
+            `Bunny rejected credentials (HTTP ${status}) for ${method} ${opts.path}. ${rejectedHint(opts.scope)}`,
+          );
         }
 
         if (status >= 200 && status < 300) {

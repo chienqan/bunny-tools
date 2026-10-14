@@ -23,13 +23,13 @@
 | TypeScript source | kebab-case | `credential-resolver.ts`, `render-help.ts` |
 | Test files | `{source}.test.ts` | `http.test.ts` |
 | Build scripts | kebab-case .ts | `post-build.ts`, `generate-manifest.ts` (tsx runner) |
-| Directories | kebab-case | `src/api/`, `src/manifest/`, `src/commands/pull-zone/` |
-| Command names (registry) | space-delimited | `pullzone edgerule add` (directory: `src/commands/pull-zone/edge-rule/`) |
-| Command names (CLI output) | flattened or hyphenated | `bunny pullzone edgerule add` or `bunny pull-zone edge-rule add` (aliases, rc.10+) |
+| Directories | kebab-case | `src/api/`, `src/manifest/`, `src/commands/storage/zone/` |
+| Command names (registry) | space-delimited | `cdn rule add` (directory: `src/commands/cdn/rule/`) |
+| Command names (CLI) | `<resource> [<sub-resource>] <verb>` | `bunny cdn rule add`, `bunny storage zone list` |
 
 **Rationale:** 
 - Source files: kebab-case for filesystem readability
-- Command names: space-delimited in registry (canonical, rc.7+); directories use kebab-case; **canonical flat form only at CLI (rc.18+)**; hyphen aliases dropped pre-GA except `cdn` (alias for `pullzone` group)
+- Command names: space-delimited in the registry; the command file path mirrors the name (`cdn rule add` → `src/commands/cdn/rule/add.ts`). Verbs: `list` (alias `ls`), `get`, `create`, `update`, `delete` (alias `rm`). See the naming rules at the top of `src/manifest/registry.ts`.
 - Self-documenting names help LLM tools understand purpose without reading content
 
 ### File Size
@@ -94,16 +94,15 @@ Commands declared in `src/manifest/registry.ts` with space-delimited names:
 
 ```ts
 {
-  name: 'pullzone edgerule add',              // Space-delimited canonical
-  summary: 'Add edge rule to a pull zone',
-  description: '...',
-  args: [
-    { name: 'pullZoneId', ... },
-    { name: 'ruleJson', ... }
+  name: 'cdn rule add',                       // Space-delimited canonical
+  summary: 'Add or update an edge rule (raw JSON rule; include Guid to update).',
+  args: [{ name: 'pullZone', description: 'Pull zone name or id.', required: true }],
+  flags: [
+    { name: 'rule', description: 'JSON rule body.', hasValue: true },
+    { name: 'json', description: 'Emit JSON result.', hasValue: false },
   ],
-  flags: [ ... ],
   examples: [ ... ],
-  load: () => import('../commands/pull-zone/edge-rule/add.js'),
+  load: () => import('../commands/cdn/rule/add.js'),
 }
 ```
 
@@ -119,10 +118,10 @@ src/commands/
 ├── storage/
 │   ├── upload.ts
 │   └── ...
-├── pull-zone/              # Directory: kebab-case
+├── cdn/                    # `bunny cdn ...`
 │   ├── list.ts
 │   ├── create.ts
-│   └── edge-rule/          # Nested subdir for 3-level commands
+│   └── rule/               # Nested subdir for 3-level commands
 │       ├── list.ts
 │       ├── add.ts
 │       └── delete.ts
@@ -135,32 +134,19 @@ Registry groups declare metadata used by CLI:
 ```ts
 {
   groups: [
-    { name: 'pullzone', description: 'Manage pull zones (CDN).', aliases: ['pull-zone'] },
-    { name: 'pullzone edgerule', description: 'Manage edge rules.', aliases: ['edge-rule'] },
+    { name: 'cdn', description: 'Pull zones (CDN): create/list/delete, edge rules, custom hostnames.' },
+    { name: 'cdn rule', description: 'Edge rules on a pull zone.' },
   ],
 }
 ```
 
 CLI walker creates intermediate group commands with these descriptions; `bunny --help` shows real prose, not stubs.
 
-### Aliases (rc.17+; Hyphen Aliases Dropped rc.18)
+### Aliases
 
-**rc.10–rc.17:** Any group could declare aliases in `.aliases[]` (hyphen forms like `pull-zone`, `storage-zone`, `edge-rule`).
+Leaf commands declare `aliases` for verb shortcuts: every `list` also answers to `ls`, every `delete` to `rm` (storage file commands are canonical `ls`/`rm` with `list`/`delete` as aliases). A registry test enforces this.
 
-**rc.18 (BREAKING):** Hyphen aliases dropped pre-GA. Only canonical flat forms work:
-```bash
-bunny pullzone list           # canonical (works)
-bunny pull-zone list          # hyphen alias (dropped rc.18 - DOES NOT WORK)
-bunny storagezone create ...  # canonical (works)
-bunny storage-zone create ... # hyphen alias (dropped rc.18 - DOES NOT WORK)
-```
-
-**Exception:** `cdn` alias retained for `pullzone` group (dashboard parity):
-```bash
-bunny cdn list               # alias for `bunny pullzone list`
-```
-
-**Rationale:** Simpler CLI surface for GA. No duplication in help trees. Users adjust muscle memory to canonical form once.
+0.1.x names (`storagezone`, `pullzone`, `edgerule`, `containers app`) were removed in 0.2.0 without aliases. Typing one exits 1 with a rename hint (`src/cli.ts`), so old scripts fail loudly instead of silently printing help.
 
 ---
 

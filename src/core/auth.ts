@@ -7,7 +7,7 @@ import {
   getActiveProfile,
   listScopesInProfile,
   maskCredential,
-  resolveCredential,
+  resolveCredentialWithSource,
   scopeToAccount,
   setCredential,
 } from '../config/credential-resolver.js';
@@ -47,10 +47,10 @@ export async function listScopes(profile?: string): Promise<StoredScope[]> {
     const scope = parseAccountString(account);
     if (!scope) continue;
     try {
-      const value = await resolveCredential(scope, { profile: p });
+      const { value, source } = await resolveCredentialWithSource(scope, { profile: p });
       out.push({
         scope: scopeToAccount(scope),
-        storedIn: 'unknown',
+        storedIn: source === 'env' || source === 'keychain' || source === 'file' ? source : 'unknown',
         masked: maskCredential(value),
       });
     } catch {
